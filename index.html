@@ -1,16 +1,473 @@
-<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
-<html>
+<!DOCTYPE html>
+<html lang="en">
 <head>
-  <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
-  <meta http-equiv="Content-Style-Type" content="text/css">
-  <title></title>
-  <meta name="Generator" content="Cocoa HTML Writer">
-  <meta name="CocoaVersion" content="2762.3">
-  <style type="text/css">
-    p.p1 {margin: 0.0px 0.0px 0.0px 0.0px; font: 12.0px Helvetica}
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Budget">
+  <title>Budget Tracker</title>
+  <style>
+    :root {
+      --bg: #f5f2ed;
+      --card: #ffffff;
+      --ink: #1a1a1a;
+      --muted: #7a7670;
+      --border: #e4e0da;
+      --green: #2d6a4f;
+      --green-bg: #e8f3ed;
+      --red: #a4243b;
+      --red-bg: #fce8ec;
+      --amber: #b45309;
+      --amber-bg: #fef3e2;
+      --blue: #1e4a7a;
+      --blue-bg: #e8f0fa;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    body {
+      font-family: -apple-system, system-ui, 'Segoe UI', sans-serif;
+      background: var(--bg);
+      color: var(--ink);
+      line-height: 1.45;
+      max-width: 480px;
+      margin: 0 auto;
+      padding: 0 0 80px 0;
+      min-height: 100vh;
+      -webkit-font-smoothing: antialiased;
+    }
+    .header {
+      background: var(--ink);
+      color: #fff;
+      padding: 52px 20px 20px;
+      position: sticky; top: 0; z-index: 100;
+    }
+    .header h1 { font-size: 20px; font-weight: 700; letter-spacing: -0.3px; }
+    .header-sub { font-size: 12px; color: rgba(255,255,255,0.5); margin-top: 2px; }
+    .tabs {
+      display: flex;
+      background: var(--card);
+      border-bottom: 1px solid var(--border);
+      position: sticky; top: 94px; z-index: 99;
+    }
+    .tab {
+      flex: 1; padding: 12px 4px; text-align: center;
+      font-size: 12px; font-weight: 600; color: var(--muted);
+      border: none; background: none; cursor: pointer;
+      border-bottom: 2px solid transparent; transition: all 0.15s;
+    }
+    .tab.active { color: var(--ink); border-bottom-color: var(--ink); }
+    .panel { display: none; padding: 16px; }
+    .panel.active { display: block; }
+
+    .metric-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px; }
+    .metric-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 14px; }
+    .mc-val { font-size: 24px; font-weight: 700; letter-spacing: -0.5px; }
+    .mc-val.green { color: var(--green); }
+    .mc-val.red { color: var(--red); }
+    .mc-val.amber { color: var(--amber); }
+    .mc-lbl { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; margin-top: 2px; }
+
+    .section-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: var(--muted); padding: 16px 0 8px; }
+    .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; margin-bottom: 10px; overflow: hidden; }
+    .card-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; cursor: pointer; }
+    .card-title { font-size: 14px; font-weight: 600; }
+    .card-body { padding: 0 16px 14px; }
+    .badge { font-size: 10px; font-weight: 700; padding: 3px 8px; border-radius: 99px; text-transform: uppercase; letter-spacing: 0.3px; }
+    .badge-green { background: var(--green-bg); color: var(--green); }
+    .badge-red { background: var(--red-bg); color: var(--red); }
+
+    .week-row { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid var(--border); }
+    .week-row:last-child { border-bottom: none; }
+    .week-row.current { background: var(--green-bg); }
+    .week-row.skip { background: var(--red-bg); opacity: 0.7; }
+    .week-date { font-size: 13px; font-weight: 600; }
+    .week-meta { font-size: 11px; color: var(--muted); }
+    .week-input { width: 80px; font-size: 15px; font-weight: 600; text-align: right; border: 1px solid var(--border); border-radius: 8px; padding: 6px 8px; background: var(--bg); font-family: inherit; color: var(--ink); }
+    .week-input:focus { outline: none; border-color: var(--green); background: #fff; }
+
+    .flow-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+    .flow-row:last-child { border-bottom: none; }
+    .flow-label { color: var(--muted); }
+    .flow-val { font-weight: 600; font-variant-numeric: tabular-nums; }
+    .flow-val.neg { color: var(--red); }
+    .flow-val.pos { color: var(--green); }
+    .flow-val.amber { color: var(--amber); }
+
+    .alert-card { border-radius: 12px; padding: 14px 16px; margin-bottom: 10px; font-size: 13px; }
+    .alert-card.warn { background: var(--amber-bg); border: 1px solid #e8d5b0; }
+    .alert-card.danger { background: var(--red-bg); border: 1px solid #e8c4c4; }
+    .alert-card.ok { background: var(--green-bg); border: 1px solid #c3d9c1; }
+    .alert-title { font-weight: 700; margin-bottom: 4px; }
+
+    .progress-bar { height: 8px; background: var(--border); border-radius: 4px; margin-top: 8px; overflow: hidden; }
+    .progress-fill { height: 100%; background: var(--green); border-radius: 4px; transition: width 0.3s; }
+
+    .sav-account { background: var(--card); border: 1px solid var(--border); border-radius: 12px; margin-bottom: 12px; padding: 16px; }
+    .sav-head { display: flex; justify-content: space-between; align-items: baseline; }
+    .sav-name { font-size: 14px; font-weight: 600; }
+    .sav-total { font-size: 20px; font-weight: 700; color: var(--green); }
+    .sav-goal { font-size: 11px; color: var(--muted); margin-top: 2px; }
+    .add-form { display: flex; gap: 8px; margin-top: 12px; }
+    .add-input { flex: 1; font-size: 14px; border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; background: var(--bg); font-family: inherit; color: var(--ink); min-width: 0; }
+    .add-input:focus { outline: none; border-color: var(--green); background: #fff; }
+    .add-btn { background: var(--green); color: #fff; border: none; border-radius: 8px; padding: 8px 16px; font-size: 14px; font-weight: 600; cursor: pointer; font-family: inherit; flex-shrink: 0; }
+    .log-entry { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+    .log-entry:last-child { border-bottom: none; }
+    .log-date { color: var(--muted); font-size: 12px; }
+    .log-amt { font-weight: 600; color: var(--green); }
+    .del-btn { background: none; border: none; color: var(--red); font-size: 18px; cursor: pointer; padding: 0 4px; margin-left: 8px; }
+    .log-empty { font-size: 12px; color: var(--muted); padding: 8px 0; font-style: italic; }
+
+    .toggle-row { display: flex; align-items: center; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid var(--border); }
+    .toggle-row:last-child { border-bottom: none; }
+    .toggle-label { font-size: 13px; }
+    .toggle-amount { font-size: 13px; color: var(--muted); margin-left: auto; margin-right: 12px; }
+    .toggle { width: 44px; height: 26px; background: #ccc; border-radius: 13px; position: relative; cursor: pointer; transition: background 0.2s; flex-shrink: 0; border: none; }
+    .toggle.on { background: var(--green); }
+    .toggle::after { content: ''; width: 22px; height: 22px; background: #fff; border-radius: 50%; position: absolute; top: 2px; left: 2px; transition: transform 0.2s; box-shadow: 0 1px 3px rgba(0,0,0,0.15); }
+    .toggle.on::after { transform: translateX(18px); }
+
+    .reset-btn { width: 100%; padding: 14px; background: var(--red-bg); color: var(--red); border: 1px solid #e8c4c4; border-radius: 12px; font-size: 14px; font-weight: 600; cursor: pointer; margin-top: 16px; font-family: inherit; }
   </style>
 </head>
 <body>
-<p class="p1">~/Library/Application Support/Dia/User Data/Profile 3/AgentServer/contexts/621C66E7-4CA2-487C-9BB5-3C734684A331/work/artifacts/budget_app/</p>
+
+<div class="header">
+  <h1>Budget Tracker</h1>
+  <div class="header-sub">Paid Thursdays · Expense Account System · Jun 2026 – Feb 2027</div>
+</div>
+
+<div class="tabs">
+  <button class="tab active" data-tab="dashboard" onclick="switchTab('dashboard')">Home</button>
+  <button class="tab" data-tab="savings" onclick="switchTab('savings')">Savings</button>
+  <button class="tab" data-tab="weeks" onclick="switchTab('weeks')">Weeks</button>
+  <button class="tab" data-tab="projection" onclick="switchTab('projection')">Plan</button>
+  <button class="tab" data-tab="settings" onclick="switchTab('settings')">More</button>
+</div>
+
+<div id="dashboard" class="panel active"></div>
+<div id="savings" class="panel"></div>
+<div id="weeks" class="panel"></div>
+<div id="projection" class="panel"></div>
+<div id="settings" class="panel"></div>
+
+<script>
+const BILLS = [
+  { id: 'gym', name: 'Gym', amount: 40, day: 1 },
+  { id: 'monarch', name: 'Monarch Money', amount: 15, day: 4 },
+  { id: 'loan101', name: 'Loan 1-101 (2.75%)', amount: 53, day: 12 },
+  { id: 'loan102', name: 'Loan 1-102 (5.50%)', amount: 83, day: 12 },
+  { id: 'loan103', name: 'Loan 1-103 min (6.53%)', amount: 88, day: 12 },
+  { id: 'extra103', name: 'Extra → 1-103', amount: 520, day: 12 },
+  { id: 'carins', name: 'Car insurance', amount: 500, day: 28 },
+  { id: 'carpay', name: 'Car payment', amount: 415, day: 28 },
+  { id: 'hysa', name: 'Amex HYSA', amount: 1000, day: 28 },
+  { id: 'roth', name: 'Roth IRA', amount: 680, day: 28 },
+  { id: 'brokerage', name: 'Brokerage', amount: 230, day: 28 }
+];
+
+const SAVINGS_ACCOUNTS = [
+  { id: 'hysa', name: 'Amex HYSA (Unemployment)', goal: 8000 },
+  { id: 'roth', name: 'Roth IRA', goal: 7000 },
+  { id: 'brokerage', name: 'Brokerage', goal: 2000 },
+  { id: 'loan103', name: 'Loan 1-103 Payoff (6.53%)', goal: 7305 },
+  { id: 'loan102', name: 'Loan 1-102 Payoff (5.50%)', goal: 7383 },
+  { id: 'loan101', name: 'Loan 1-101 Payoff (2.75%)', goal: 5340 }
+];
+
+const START = new Date(2026, 5, 25);
+const SKIP_DATES = ['2026-12-24', '2026-12-31'];
+
+function getThursdays() {
+  const dates = [];
+  const d = new Date(START);
+  const end = new Date(2027, 1, 28);
+  while (d <= end) { dates.push(new Date(d)); d.setDate(d.getDate() + 7); }
+  return dates;
+}
+function fmt(d) { const m = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']; return `${m[d.getMonth()]} ${d.getDate()}`; }
+function fmtKey(d) { return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
+function money(n) { if (n < 0) return '-$' + Math.abs(Math.round(n)).toLocaleString(); return '$' + Math.round(n).toLocaleString(); }
+
+function loadState() { try { const s = localStorage.getItem('budget_v2'); return s ? JSON.parse(s) : null; } catch { return null; } }
+function saveState() { localStorage.setItem('budget_v2', JSON.stringify(state)); }
+
+const defaults = {};
+getThursdays().forEach(d => {
+  const key = fmtKey(d);
+  if (SKIP_DATES.includes(key)) defaults[key] = 0;
+  else if (key === '2026-06-25') defaults[key] = 274;
+  else defaults[key] = 838;
+});
+const defaultToggles = {};
+getThursdays().forEach(d => {
+  const mk = `${d.getFullYear()}-${d.getMonth()}`;
+  if (!defaultToggles[mk]) {
+    defaultToggles[mk] = {};
+    BILLS.forEach(b => { defaultToggles[mk][b.id] = true; });
+    if (d.getMonth() === 11 && d.getFullYear() === 2026) {
+      defaultToggles[mk]['roth'] = false;
+      defaultToggles[mk]['brokerage'] = false;
+      defaultToggles[mk]['extra103'] = false;
+    }
+  }
+});
+
+let state = loadState() || { transfers: { ...defaults }, toggles: JSON.parse(JSON.stringify(defaultToggles)), contributions: [] };
+if (!state.toggles) state.toggles = JSON.parse(JSON.stringify(defaultToggles));
+if (!state.contributions) state.contributions = [];
+
+function savedTotal(accountId) {
+  return state.contributions.filter(c => c.account === accountId).reduce((s, c) => s + c.amount, 0);
+}
+
+function getMonthBills(year, month) {
+  const key = `${year}-${month}`;
+  const t = state.toggles[key] || {};
+  return BILLS.filter(b => t[b.id] !== false);
+}
+
+function simulate() {
+  const thursdays = getThursdays();
+  const events = [];
+  let balance = 0;
+  const months = new Set();
+  thursdays.forEach(d => {
+    const key = fmtKey(d);
+    const amt = state.transfers[key] ?? 838;
+    const skip = SKIP_DATES.includes(key);
+    events.push({ date: new Date(d), type: 'paycheck', amount: amt, skip, key });
+    months.add(`${d.getFullYear()}-${d.getMonth()}`);
+  });
+  months.forEach(mk => {
+    const [y, m] = mk.split('-').map(Number);
+    getMonthBills(y, m).forEach(b => {
+      events.push({ date: new Date(y, m, b.day), type: 'bill', bill: b, amount: -b.amount });
+    });
+  });
+  events.sort((a, b) => {
+    const diff = a.date - b.date;
+    if (diff !== 0) return diff;
+    if (a.type === 'paycheck' && b.type === 'bill') return -1;
+    if (a.type === 'bill' && b.type === 'paycheck') return 1;
+    return 0;
+  });
+  const result = [];
+  events.forEach(e => { if (e.skip) return; balance += e.amount; result.push({ ...e, balance }); });
+  return { events: result };
+}
+
+function findCurrentWeek() {
+  const now = new Date();
+  const thursdays = getThursdays();
+  for (let i = thursdays.length - 1; i >= 0; i--) if (now >= thursdays[i]) return i;
+  return 0;
+}
+
+function renderDashboard() {
+  const el = document.getElementById('dashboard');
+  const sim = simulate();
+  const thursdays = getThursdays();
+  const cwi = findCurrentWeek();
+  const currentKey = fmtKey(thursdays[cwi]);
+  const currentTransfer = state.transfers[currentKey] ?? 838;
+  const keeping = 1038 - currentTransfer;
+
+  let minBal = Infinity, minDate = null;
+  sim.events.forEach(e => { if (e.balance < minBal) { minBal = e.balance; minDate = e.date; } });
+  const weeksLeft = thursdays.length - cwi;
+  const minClass = minBal < 0 ? 'red' : minBal < 50 ? 'amber' : 'green';
+
+  let alerts = '';
+  if (minBal < 0) alerts = `<div class="alert-card danger"><div class="alert-title">Account Goes Negative</div>Expense account hits ${money(minBal)} on ${fmt(minDate)}. Adjust transfers or pause a bill.</div>`;
+  else if (minBal < 50) alerts = `<div class="alert-card warn"><div class="alert-title">Tight Spot Ahead</div>Drops to ${money(minBal)} on ${fmt(minDate)}. Don't charge anything extra that day.</div>`;
+  else alerts = `<div class="alert-card ok"><div class="alert-title">All Clear</div>Expense account stays above ${money(minBal)} through Feb 2027.</div>`;
+
+  let savHtml = '';
+  SAVINGS_ACCOUNTS.forEach(a => {
+    const total = savedTotal(a.id);
+    const pct = Math.min(100, total / a.goal * 100);
+    savHtml += `<div class="card"><div style="padding:14px 16px">
+      <div style="display:flex;justify-content:space-between;align-items:baseline">
+        <span style="font-size:13px;font-weight:600">${a.name}</span>
+        <span style="font-size:16px;font-weight:700;color:var(--green)">${money(total)}</span>
+      </div>
+      <div style="font-size:11px;color:var(--muted);margin-top:2px">of ${money(a.goal)} · ${Math.round(pct)}%</div>
+      <div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div>
+    </div></div>`;
+  });
+
+  el.innerHTML = `
+    <div class="metric-row">
+      <div class="metric-card"><div class="mc-val">${money(currentTransfer)}</div><div class="mc-lbl">This Week's Transfer</div></div>
+      <div class="metric-card"><div class="mc-val">${money(keeping)}</div><div class="mc-lbl">Keep in Checking</div></div>
+    </div>
+    <div class="metric-row">
+      <div class="metric-card"><div class="mc-val ${minClass}">${money(minBal)}</div><div class="mc-lbl">Lowest Balance</div></div>
+      <div class="metric-card"><div class="mc-val">${weeksLeft}</div><div class="mc-lbl">Weeks Left</div></div>
+    </div>
+    ${alerts}
+    <div class="section-title">Savings Tracker (Actual)</div>
+    ${savHtml}
+    <p style="font-size:12px;color:var(--muted);margin-top:4px">Log real contributions on the Savings tab. These start at $0 and only count what you've actually deposited.</p>
+  `;
+}
+
+function renderSavings() {
+  const el = document.getElementById('savings');
+  let html = '<p style="font-size:13px;color:var(--muted);margin-bottom:12px">Log each real deposit as you make it. Totals reflect only what you\'ve actually contributed.</p>';
+
+  SAVINGS_ACCOUNTS.forEach(a => {
+    const total = savedTotal(a.id);
+    const pct = Math.min(100, total / a.goal * 100);
+    const entries = state.contributions.filter(c => c.account === a.id).sort((x, y) => y.date.localeCompare(x.date));
+
+    html += `<div class="sav-account">
+      <div class="sav-head">
+        <span class="sav-name">${a.name}</span>
+        <span class="sav-total">${money(total)}</span>
+      </div>
+      <div class="sav-goal">of ${money(a.goal)} goal · ${Math.round(pct)}%</div>
+      <div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div>
+      <div class="add-form">
+        <input class="add-input" type="number" placeholder="Amount" id="amt-${a.id}" inputmode="decimal">
+        <input class="add-input" type="date" id="date-${a.id}" value="${fmtKey(new Date())}" style="flex:0 0 auto;width:auto">
+        <button class="add-btn" onclick="addContribution('${a.id}')">Add</button>
+      </div>`;
+
+    if (entries.length === 0) {
+      html += '<div class="log-empty">No contributions logged yet.</div>';
+    } else {
+      html += '<div style="margin-top:12px">';
+      entries.forEach(c => {
+        const d = new Date(c.date + 'T00:00:00');
+        html += `<div class="log-entry">
+          <span class="log-date">${fmt(d)}, ${d.getFullYear()}</span>
+          <span style="display:flex;align-items:center">
+            <span class="log-amt">${money(c.amount)}</span>
+            <button class="del-btn" onclick="delContribution('${c.id}')">×</button>
+          </span>
+        </div>`;
+      });
+      html += '</div>';
+    }
+    html += '</div>';
+  });
+
+  el.innerHTML = html;
+}
+
+function addContribution(accountId) {
+  const amtInput = document.getElementById('amt-' + accountId);
+  const dateInput = document.getElementById('date-' + accountId);
+  const amount = parseFloat(amtInput.value);
+  if (isNaN(amount) || amount === 0) { amtInput.focus(); return; }
+  state.contributions.push({ id: 'c' + Date.now() + Math.random().toString(36).slice(2,6), account: accountId, amount, date: dateInput.value || fmtKey(new Date()) });
+  saveState();
+  amtInput.value = '';
+  renderSavings();
+}
+
+function delContribution(id) {
+  state.contributions = state.contributions.filter(c => c.id !== id);
+  saveState();
+  renderSavings();
+}
+
+function renderWeeks() {
+  const el = document.getElementById('weeks');
+  const thursdays = getThursdays();
+  const cwi = findCurrentWeek();
+  let html = '<div class="section-title">Weekly Transfers</div><div class="card">';
+  thursdays.forEach((d, i) => {
+    const key = fmtKey(d);
+    const skip = SKIP_DATES.includes(key);
+    const val = state.transfers[key] ?? 838;
+    const isCurrent = i === cwi;
+    const cls = skip ? 'skip' : isCurrent ? 'current' : '';
+    const mn = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const label = `${mn[d.getMonth()]} ${d.getDate()}`;
+    if (skip) {
+      html += `<div class="week-row ${cls}"><div><div class="week-date">${label}</div><div class="week-meta">No paycheck</div></div><span class="badge badge-red">Skip</span></div>`;
+    } else {
+      html += `<div class="week-row ${cls}"><div><div class="week-date">${label}${isCurrent ? ' ←' : ''}</div><div class="week-meta">Keep $${1038 - val} in checking</div></div><div style="display:flex;align-items:center;gap:8px"><span style="font-size:12px;color:var(--muted)">$</span><input class="week-input" type="number" value="${val}" data-key="${key}" onchange="updateTransfer(this)" min="0" max="1038"></div></div>`;
+    }
+  });
+  html += '</div>';
+  el.innerHTML = html;
+}
+
+function renderProjection() {
+  const el = document.getElementById('projection');
+  const sim = simulate();
+  const mn = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  let currentMonth = -1;
+  let html = '<div class="section-title">Expense Account Timeline</div>';
+  sim.events.forEach(e => {
+    const m = e.date.getMonth();
+    if (m !== currentMonth) {
+      if (currentMonth !== -1) html += '</div></div>';
+      currentMonth = m;
+      html += `<div class="card"><div class="card-header" onclick="const b=this.nextElementSibling;b.style.display=b.style.display==='none'?'block':'none'"><span class="card-title">${mn[m]} ${e.date.getFullYear()}</span><span style="font-size:12px;color:var(--muted)">tap</span></div><div class="card-body">`;
+    }
+    const label = e.type === 'paycheck' ? 'Paycheck transfer' : (e.bill ? e.bill.name : '?');
+    const balColor = e.balance < 0 ? 'neg' : e.balance < 50 ? 'amber' : 'pos';
+    html += `<div class="flow-row"><span class="flow-label">${mn[e.date.getMonth()]} ${e.date.getDate()} · ${label}</span><span class="flow-val ${e.amount >= 0 ? 'pos' : 'neg'}">${e.amount >= 0 ? '+' : ''}${money(e.amount)}</span></div>
+    <div class="flow-row" style="border-bottom-width:2px;padding-bottom:6px"><span class="flow-label" style="font-size:11px">Balance</span><span class="flow-val ${balColor}" style="font-size:12px">${money(e.balance)}</span></div>`;
+  });
+  if (currentMonth !== -1) html += '</div></div>';
+  el.innerHTML = html;
+}
+
+function renderSettings() {
+  const el = document.getElementById('settings');
+  const mn = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const months = [];
+  for (let m = 6; m <= 11; m++) months.push({ y: 2026, m });
+  for (let m = 0; m <= 1; m++) months.push({ y: 2027, m });
+  let html = '<div class="section-title">Monthly Bill Toggles</div><p style="font-size:12px;color:var(--muted);margin-bottom:12px">Turn bills on/off per month. Updates the Plan projection instantly.</p>';
+  months.forEach(({ y, m }) => {
+    const mk = `${y}-${m}`;
+    if (!state.toggles[mk]) { state.toggles[mk] = {}; BILLS.forEach(b => { state.toggles[mk][b.id] = true; }); }
+    html += `<div class="card"><div class="card-header" onclick="const b=this.nextElementSibling;b.style.display=b.style.display==='none'?'block':'none'"><span class="card-title">${mn[m]} ${y}</span><span style="font-size:12px;color:var(--muted)">tap</span></div><div class="card-body" style="display:none">`;
+    BILLS.forEach(b => {
+      const on = state.toggles[mk][b.id] !== false;
+      html += `<div class="toggle-row"><span class="toggle-label">${b.name}</span><span class="toggle-amount">${money(b.amount)}</span><button class="toggle ${on ? 'on' : ''}" data-month="${mk}" data-bill="${b.id}" onclick="toggleBill(this)"></button></div>`;
+    });
+    html += '</div></div>';
+  });
+  html += `<div class="section-title" style="margin-top:20px">Data</div>
+    <button class="reset-btn" onclick="if(confirm('Reset transfers and toggles? Your logged savings contributions will be kept.')){state.transfers={...defaults};state.toggles=JSON.parse(JSON.stringify(defaultToggles));saveState();renderDashboard();renderProjection();alert('Reset done.');}">Reset Plan to Defaults</button>
+    <button class="reset-btn" onclick="if(confirm('Delete ALL logged savings contributions? This cannot be undone.')){state.contributions=[];saveState();renderDashboard();renderSavings();alert('Contributions cleared.');}">Clear All Contributions</button>`;
+  el.innerHTML = html;
+}
+
+function updateTransfer(input) {
+  state.transfers[input.dataset.key] = Math.max(0, Math.min(1038, parseInt(input.value) || 0));
+  saveState();
+  renderDashboard();
+}
+function toggleBill(btn) {
+  const mk = btn.dataset.month, bid = btn.dataset.bill;
+  state.toggles[mk][bid] = !state.toggles[mk][bid];
+  btn.classList.toggle('on');
+  saveState();
+  renderDashboard();
+  renderProjection();
+}
+function switchTab(id) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.querySelector(`[data-tab="${id}"]`).classList.add('active');
+  document.getElementById(id).classList.add('active');
+  if (id === 'savings') renderSavings();
+  if (id === 'weeks') renderWeeks();
+  if (id === 'projection') renderProjection();
+  if (id === 'settings') renderSettings();
+  if (id === 'dashboard') renderDashboard();
+}
+
+renderDashboard();
+</script>
 </body>
 </html>
