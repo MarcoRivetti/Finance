@@ -216,6 +216,8 @@ getThursdays().forEach(d => {
 let state = loadState() || { transfers: { ...defaults }, toggles: JSON.parse(JSON.stringify(defaultToggles)), contributions: [] };
 if (!state.toggles) state.toggles = JSON.parse(JSON.stringify(defaultToggles));
 if (!state.contributions) state.contributions = [];
+if (state.startBalance === undefined) state.startBalance = 274;
+if (!state.startDate) state.startDate = '2026-06-29';
 
 function savedTotal(accountId) {
   return state.contributions.filter(c => c.account === accountId).reduce((s, c) => s + c.amount, 0);
@@ -230,7 +232,8 @@ function getMonthBills(year, month) {
 function simulate() {
   const thursdays = getThursdays();
   const events = [];
-  let balance = 0;
+  let balance = state.startBalance || 0;
+  const startD = new Date((state.startDate || '2026-06-29') + 'T00:00:00');
   const months = new Set();
   thursdays.forEach(d => {
     const key = fmtKey(d);
@@ -253,7 +256,12 @@ function simulate() {
     return 0;
   });
   const result = [];
-  events.forEach(e => { if (e.skip) return; balance += e.amount; result.push({ ...e, balance }); });
+  events.forEach(e => {
+    if (e.skip) return;
+    if (e.date < startD) return;
+    balance += e.amount;
+    result.push({ ...e, balance });
+  });
   return { events: result };
 }
 
@@ -278,6 +286,27 @@ function renderDashboard() {
   const weeksLeft = thursdays.length - cwi;
   const minClass = minBal < 0 ? 'red' : minBal < 50 ? 'amber' : 'green';
 
+  const now = new Date();
+  let liveBalance = state.startBalance || 0;
+  let lastEvent = null;
+  let nextEvent = null;
+  for (const e of sim.events) {
+    if (e.date <= now) { liveBalance = e.balance; lastEvent = e; }
+    else if (!nextEvent) { nextEvent = e; }
+  }
+  const mn = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  let nextLabel = '';
+  if (nextEvent) {
+    const lab = nextEvent.type === 'paycheck' ? 'Paycheck transfer' : (nextEvent.bill ? nextEvent.bill.name : '');
+    const sign = nextEvent.amount >= 0 ? '+' : '';
+    nextLabel = `Next: ${mn[nextEvent.date.getMonth()]} ${nextEvent.date.getDate()} · ${lab} (${sign}${money(nextEvent.amount)})`;
+  } else {
+    nextLabel = 'Plan complete through Feb 2027';
+  }
+  const lastLabel = lastEvent
+    ? `Last: ${mn[lastEvent.date.getMonth()]} ${lastEvent.date.getDate()} · ${lastEvent.type === 'paycheck' ? 'Paycheck' : (lastEvent.bill ? lastEvent.bill.name : '')}`
+    : `Starting balance · set ${mn[new Date((state.startDate||'2026-06-29')+'T00:00:00').getMonth()]} ${new Date((state.startDate||'2026-06-29')+'T00:00:00').getDate()}`;
+
   let alerts = '';
   if (minBal < 0) alerts = `<div class="alert-card danger"><div class="alert-title">Account Goes Negative</div>Expense account hits ${money(minBal)} on ${fmt(minDate)}. Adjust transfers or pause a bill.</div>`;
   else if (minBal < 50) alerts = `<div class="alert-card warn"><div class="alert-title">Tight Spot Ahead</div>Drops to ${money(minBal)} on ${fmt(minDate)}. Don't charge anything extra that day.</div>`;
@@ -298,6 +327,14 @@ function renderDashboard() {
   });
 
   el.innerHTML = `
+    <div class="card" style="background:var(--ink);border:none;margin-bottom:16px">
+      <div style="padding:18px 18px 16px">
+        <div style="font-size:11px;color:rgba(255,255,255,0.5);text-transform:uppercase;letter-spacing:0.6px">Expense Account · As of Today</div>
+        <div style="font-size:38px;font-weight:700;letter-spacing:-1px;color:${liveBalance < 0 ? '#ff8a9b' : liveBalance < 50 ? '#fbbf6b' : '#7fd1a8'};margin:2px 0">${money(liveBalance)}</div>
+        <div style="font-size:12px;color:rgba(255,255,255,0.6)">${lastLabel}</div>
+        <div style="font-size:12px;color:rgba(255,255,255,0.45);margin-top:2px">${nextLabel}</div>
+      </div>
+    </div>
     <div class="metric-row">
       <div class="metric-card"><div class="mc-val">${money(currentTransfer)}</div><div class="mc-lbl">This Week's Transfer</div></div>
       <div class="metric-card"><div class="mc-val">${money(keeping)}</div><div class="mc-lbl">Keep in Checking</div></div>
@@ -425,7 +462,20 @@ function renderSettings() {
   const months = [];
   for (let m = 6; m <= 11; m++) months.push({ y: 2026, m });
   for (let m = 0; m <= 1; m++) months.push({ y: 2027, m });
-  let html = '<div class="section-title">Monthly Bill Toggles</div><p style="font-size:12px;color:var(--muted);margin-bottom:12px">Turn bills on/off per month. Updates the Plan projection instantly.</p>';
+  let html = '<div class="section-title">Starting Balance</div><p style="font-size:12px;color:var(--muted);margin-bottom:12px">What\'s actually in your expense account, and the date that reflects. The projection builds forward from here. Events before this date are excluded (already paid).</p>';
+  html += `<div class="card"><div style="padding:14px 16px">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+      <span style="font-size:13px;font-weight:600;flex:1">Balance today</span>
+      <span style="font-size:14px;color:var(--muted)">$</span>
+      <input class="week-input" type="number" id="startBal" value="${state.startBalance ?? 274}" onchange="updateStart()" style="width:100px">
+    </div>
+    <div style="display:flex;align-items:center;gap:10px">
+      <span style="font-size:13px;font-weight:600;flex:1">As of date</span>
+      <input class="add-input" type="date" id="startDate" value="${state.startDate || '2026-06-29'}" onchange="updateStart()" style="flex:0 0 auto;width:auto">
+    </div>
+  </div></div>`;
+
+  html += '<div class="section-title">Monthly Bill Toggles</div><p style="font-size:12px;color:var(--muted);margin-bottom:12px">Turn bills on/off per month. Updates the Plan projection instantly.</p>';
   months.forEach(({ y, m }) => {
     const mk = `${y}-${m}`;
     if (!state.toggles[mk]) { state.toggles[mk] = {}; BILLS.forEach(b => { state.toggles[mk][b.id] = true; }); }
@@ -446,6 +496,15 @@ function updateTransfer(input) {
   state.transfers[input.dataset.key] = Math.max(0, Math.min(1038, parseInt(input.value) || 0));
   saveState();
   renderDashboard();
+}
+function updateStart() {
+  const bal = parseFloat(document.getElementById('startBal').value);
+  const dt = document.getElementById('startDate').value;
+  if (!isNaN(bal)) state.startBalance = bal;
+  if (dt) state.startDate = dt;
+  saveState();
+  renderDashboard();
+  renderProjection();
 }
 function toggleBill(btn) {
   const mk = btn.dataset.month, bid = btn.dataset.bill;
