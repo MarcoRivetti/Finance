@@ -6,6 +6,8 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="Budget">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <link rel="icon" type="image/png" href="apple-touch-icon.png">
   <title>Budget Tracker</title>
   <style>
     :root {
@@ -218,6 +220,14 @@ if (!state.toggles) state.toggles = JSON.parse(JSON.stringify(defaultToggles));
 if (!state.contributions) state.contributions = [];
 if (state.startBalance === undefined) state.startBalance = 274;
 if (!state.startDate) state.startDate = '2026-06-29';
+if (!state.amounts) state.amounts = {};
+
+function billAmount(year, month, billId) {
+  const mk = `${year}-${month}`;
+  if (state.amounts[mk] && state.amounts[mk][billId] !== undefined) return state.amounts[mk][billId];
+  const b = BILLS.find(x => x.id === billId);
+  return b ? b.amount : 0;
+}
 
 function savedTotal(accountId) {
   return state.contributions.filter(c => c.account === accountId).reduce((s, c) => s + c.amount, 0);
@@ -226,7 +236,7 @@ function savedTotal(accountId) {
 function getMonthBills(year, month) {
   const key = `${year}-${month}`;
   const t = state.toggles[key] || {};
-  return BILLS.filter(b => t[b.id] !== false);
+  return BILLS.filter(b => t[b.id] !== false).map(b => ({ ...b, amount: billAmount(year, month, b.id) }));
 }
 
 function simulate() {
@@ -475,19 +485,26 @@ function renderSettings() {
     </div>
   </div></div>`;
 
-  html += '<div class="section-title">Monthly Bill Toggles</div><p style="font-size:12px;color:var(--muted);margin-bottom:12px">Turn bills on/off per month. Updates the Plan projection instantly.</p>';
+  html += '<div class="section-title">Monthly Bills</div><p style="font-size:12px;color:var(--muted);margin-bottom:12px">Toggle bills on/off and set custom amounts per month. Defaults shown unless you change them. Updates the Plan instantly.</p>';
   months.forEach(({ y, m }) => {
     const mk = `${y}-${m}`;
     if (!state.toggles[mk]) { state.toggles[mk] = {}; BILLS.forEach(b => { state.toggles[mk][b.id] = true; }); }
     html += `<div class="card"><div class="card-header" onclick="const b=this.nextElementSibling;b.style.display=b.style.display==='none'?'block':'none'"><span class="card-title">${mn[m]} ${y}</span><span style="font-size:12px;color:var(--muted)">tap</span></div><div class="card-body" style="display:none">`;
     BILLS.forEach(b => {
       const on = state.toggles[mk][b.id] !== false;
-      html += `<div class="toggle-row"><span class="toggle-label">${b.name}</span><span class="toggle-amount">${money(b.amount)}</span><button class="toggle ${on ? 'on' : ''}" data-month="${mk}" data-bill="${b.id}" onclick="toggleBill(this)"></button></div>`;
+      const amt = billAmount(y, m, b.id);
+      const isCustom = state.amounts[mk] && state.amounts[mk][b.id] !== undefined;
+      html += `<div class="toggle-row">
+        <span class="toggle-label" style="flex:1">${b.name}${isCustom ? ' <span style="font-size:10px;color:var(--amber)">●</span>' : ''}</span>
+        <span style="font-size:12px;color:var(--muted);margin-right:6px">$</span>
+        <input class="week-input" type="number" value="${amt}" data-month="${mk}" data-bill="${b.id}" onchange="updateBillAmount(this)" style="width:70px;margin-right:10px">
+        <button class="toggle ${on ? 'on' : ''}" data-month="${mk}" data-bill="${b.id}" onclick="toggleBill(this)"></button>
+      </div>`;
     });
     html += '</div></div>';
   });
   html += `<div class="section-title" style="margin-top:20px">Data</div>
-    <button class="reset-btn" onclick="if(confirm('Reset transfers and toggles? Your logged savings contributions will be kept.')){state.transfers={...defaults};state.toggles=JSON.parse(JSON.stringify(defaultToggles));saveState();renderDashboard();renderProjection();alert('Reset done.');}">Reset Plan to Defaults</button>
+    <button class="reset-btn" onclick="if(confirm('Reset transfers, toggles, and custom bill amounts? Your logged savings contributions will be kept.')){state.transfers={...defaults};state.toggles=JSON.parse(JSON.stringify(defaultToggles));state.amounts={};saveState();renderDashboard();renderProjection();renderSettings();alert('Reset done.');}">Reset Plan to Defaults</button>
     <button class="reset-btn" onclick="if(confirm('Delete ALL logged savings contributions? This cannot be undone.')){state.contributions=[];saveState();renderDashboard();renderSavings();alert('Contributions cleared.');}">Clear All Contributions</button>`;
   el.innerHTML = html;
 }
@@ -513,6 +530,17 @@ function toggleBill(btn) {
   saveState();
   renderDashboard();
   renderProjection();
+}
+function updateBillAmount(input) {
+  const mk = input.dataset.month, bid = input.dataset.bill;
+  const val = parseFloat(input.value);
+  if (!state.amounts[mk]) state.amounts[mk] = {};
+  if (isNaN(val)) { delete state.amounts[mk][bid]; }
+  else { state.amounts[mk][bid] = val; }
+  saveState();
+  renderDashboard();
+  renderProjection();
+  renderSettings();
 }
 function switchTab(id) {
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
