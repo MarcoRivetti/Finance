@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<! DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -130,6 +130,8 @@
     .toggle.on::after { transform: translateX(18px); }
 
     .reset-btn { width: 100%; padding: 14px; background: var(--red-bg); color: var(--red); border: 1px solid #e8c4c4; border-radius: 12px; font-size: 14px; font-weight: 600; cursor: pointer; margin-top: 16px; font-family: inherit; }
+    .btn-add { font-size: 12px; font-weight: 600; background: var(--green-bg); color: var(--green); border: 1px solid #c3d9c1; border-radius: 8px; padding: 7px 14px; cursor: pointer; font-family: inherit; flex-shrink: 0; }
+    .month-total { display: flex; justify-content: space-between; align-items: center; padding: 8px 0 12px; margin-bottom: 8px; border-bottom: 2px solid var(--border); font-size: 13px; font-weight: 600; }
   </style>
 </head>
 <body>
@@ -221,11 +223,25 @@ if (!state.contributions) state.contributions = [];
 if (state.startBalance === undefined) state.startBalance = 274;
 if (!state.startDate) state.startDate = '2026-06-29';
 if (!state.amounts) state.amounts = {};
+if (!state.customGoals) state.customGoals = [];
+if (!state.customBills) state.customBills = [];
+
+function allSavingsAccounts() {
+  return [...SAVINGS_ACCOUNTS, ...state.customGoals.map(g => ({ id: g.id, name: g.name, goal: g.target || null, custom: true }))];
+}
+
+function billsForMonth(year, month) {
+  const mk = `${year}-${month}`;
+  const recurring = state.customBills.filter(b => b.recurring);
+  const oneOff = state.customBills.filter(b => !b.recurring && b.month === mk);
+  return [...BILLS, ...recurring, ...oneOff];
+}
 
 function billAmount(year, month, billId) {
   const mk = `${year}-${month}`;
   if (state.amounts[mk] && state.amounts[mk][billId] !== undefined) return state.amounts[mk][billId];
-  const b = BILLS.find(x => x.id === billId);
+  const all = billsForMonth(year, month);
+  const b = all.find(x => x.id === billId);
   return b ? b.amount : 0;
 }
 
@@ -236,7 +252,7 @@ function savedTotal(accountId) {
 function getMonthBills(year, month) {
   const key = `${year}-${month}`;
   const t = state.toggles[key] || {};
-  return BILLS.filter(b => t[b.id] !== false).map(b => ({ ...b, amount: billAmount(year, month, b.id) }));
+  return billsForMonth(year, month).filter(b => t[b.id] !== false).map(b => ({ ...b, amount: billAmount(year, month, b.id) }));
 }
 
 function simulate() {
@@ -323,17 +339,27 @@ function renderDashboard() {
   else alerts = `<div class="alert-card ok"><div class="alert-title">All Clear</div>Expense account stays above ${money(minBal)} through Feb 2027.</div>`;
 
   let savHtml = '';
-  SAVINGS_ACCOUNTS.forEach(a => {
+  allSavingsAccounts().forEach(a => {
     const total = savedTotal(a.id);
-    const pct = Math.min(100, total / a.goal * 100);
-    savHtml += `<div class="card"><div style="padding:14px 16px">
-      <div style="display:flex;justify-content:space-between;align-items:baseline">
-        <span style="font-size:13px;font-weight:600">${a.name}</span>
-        <span style="font-size:16px;font-weight:700;color:var(--green)">${money(total)}</span>
-      </div>
-      <div style="font-size:11px;color:var(--muted);margin-top:2px">of ${money(a.goal)} · ${Math.round(pct)}%</div>
-      <div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div>
-    </div></div>`;
+    if (a.goal) {
+      const pct = Math.min(100, total / a.goal * 100);
+      savHtml += `<div class="card"><div style="padding:14px 16px">
+        <div style="display:flex;justify-content:space-between;align-items:baseline">
+          <span style="font-size:13px;font-weight:600">${a.name}</span>
+          <span style="font-size:16px;font-weight:700;color:var(--green)">${money(total)}</span>
+        </div>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px">of ${money(a.goal)} · ${Math.round(pct)}%</div>
+        <div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div>
+      </div></div>`;
+    } else {
+      savHtml += `<div class="card"><div style="padding:14px 16px">
+        <div style="display:flex;justify-content:space-between;align-items:baseline">
+          <span style="font-size:13px;font-weight:600">${a.name}</span>
+          <span style="font-size:16px;font-weight:700;color:var(--green)">${money(total)}</span>
+        </div>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px">Open-ended goal</div>
+      </div></div>`;
+    }
   });
 
   el.innerHTML = `
@@ -362,20 +388,19 @@ function renderDashboard() {
 
 function renderSavings() {
   const el = document.getElementById('savings');
-  let html = '<p style="font-size:13px;color:var(--muted);margin-bottom:12px">Log each real deposit as you make it. Totals reflect only what you\'ve actually contributed.</p>';
+  let html = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px"><p style="font-size:13px;color:var(--muted);flex:1">Log each real deposit as you make it.</p><button class="btn-add" onclick="addGoal()">+ Goal</button></div>';
 
-  SAVINGS_ACCOUNTS.forEach(a => {
+  allSavingsAccounts().forEach(a => {
     const total = savedTotal(a.id);
-    const pct = Math.min(100, total / a.goal * 100);
     const entries = state.contributions.filter(c => c.account === a.id).sort((x, y) => y.date.localeCompare(x.date));
 
     html += `<div class="sav-account">
       <div class="sav-head">
-        <span class="sav-name">${a.name}</span>
+        <span class="sav-name">${a.name}${a.custom ? ` <button class="del-btn" style="font-size:14px" onclick="delGoal('${a.id}')">×</button>` : ''}</span>
         <span class="sav-total">${money(total)}</span>
       </div>
-      <div class="sav-goal">of ${money(a.goal)} goal · ${Math.round(pct)}%</div>
-      <div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div>
+      <div class="sav-goal">${a.goal ? `of ${money(a.goal)} goal · ${Math.round(Math.min(100, total/a.goal*100))}%` : 'Open-ended goal'}</div>
+      ${a.goal ? `<div class="progress-bar"><div class="progress-fill" style="width:${Math.min(100, total/a.goal*100)}%"></div></div>` : ''}
       <div class="add-form">
         <input class="add-input" type="number" placeholder="Amount" id="amt-${a.id}" inputmode="decimal">
         <input class="add-input" type="date" id="date-${a.id}" value="${fmtKey(new Date())}" style="flex:0 0 auto;width:auto">
@@ -402,6 +427,30 @@ function renderSavings() {
   });
 
   el.innerHTML = html;
+}
+
+function addGoal() {
+  const name = prompt('Goal name (e.g. Vacation):');
+  if (!name) return;
+  const targetRaw = prompt('Target amount? Leave blank for an open-ended goal (no target).');
+  let target = null;
+  if (targetRaw && targetRaw.trim() !== '') {
+    const t = parseFloat(targetRaw);
+    if (!isNaN(t) && t > 0) target = t;
+  }
+  state.customGoals.push({ id: 'g' + Date.now() + Math.random().toString(36).slice(2,6), name, target });
+  saveState();
+  renderSavings();
+  renderDashboard();
+}
+
+function delGoal(id) {
+  if (!confirm('Delete this goal? Its logged contributions will also be removed.')) return;
+  state.customGoals = state.customGoals.filter(g => g.id !== id);
+  state.contributions = state.contributions.filter(c => c.account !== id);
+  saveState();
+  renderSavings();
+  renderDashboard();
 }
 
 function addContribution(accountId) {
@@ -485,17 +534,23 @@ function renderSettings() {
     </div>
   </div></div>`;
 
-  html += '<div class="section-title">Monthly Bills</div><p style="font-size:12px;color:var(--muted);margin-bottom:12px">Toggle bills on/off and set custom amounts per month. Defaults shown unless you change them. Updates the Plan instantly.</p>';
+  html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:16px 0 8px"><span class="section-title" style="padding:0">Monthly Bills</span><button class="btn-add" onclick="addCustomBill()">+ Bill</button></div><p style="font-size:12px;color:var(--muted);margin-bottom:12px">Toggle bills on/off and set custom amounts per month. Defaults shown unless changed. Custom bills can be recurring or one-off.</p>';
   months.forEach(({ y, m }) => {
     const mk = `${y}-${m}`;
-    if (!state.toggles[mk]) { state.toggles[mk] = {}; BILLS.forEach(b => { state.toggles[mk][b.id] = true; }); }
-    html += `<div class="card"><div class="card-header" onclick="const b=this.nextElementSibling;b.style.display=b.style.display==='none'?'block':'none'"><span class="card-title">${mn[m]} ${y}</span><span style="font-size:12px;color:var(--muted)">tap</span></div><div class="card-body" style="display:none">`;
-    BILLS.forEach(b => {
+    if (!state.toggles[mk]) { state.toggles[mk] = {}; }
+    const monthBills = billsForMonth(y, m);
+    let monthTotal = 0;
+    monthBills.forEach(b => { if ((state.toggles[mk][b.id]) !== false) monthTotal += billAmount(y, m, b.id); });
+    html += `<div class="card"><div class="card-header" onclick="const b=this.nextElementSibling;b.style.display=b.style.display==='none'?'block':'none'"><span class="card-title">${mn[m]} ${y}</span><span style="font-size:13px;font-weight:700;color:var(--green)">${money(monthTotal)}/mo</span></div><div class="card-body" style="display:none">`;
+    html += `<div class="month-total"><span>Total active bills</span><span style="color:var(--green)">${money(monthTotal)}</span></div>`;
+    monthBills.forEach(b => {
       const on = state.toggles[mk][b.id] !== false;
       const amt = billAmount(y, m, b.id);
       const isCustom = state.amounts[mk] && state.amounts[mk][b.id] !== undefined;
+      const tag = b.recurring ? ' <span style="font-size:9px;color:var(--blue)">RECURRING</span>' : (b.month ? ' <span style="font-size:9px;color:var(--amber)">ONE-OFF</span>' : '');
+      const delBtn = (b.recurring || b.month) ? ` <button class="del-btn" style="font-size:14px" onclick="delCustomBill('${b.id}')">×</button>` : '';
       html += `<div class="toggle-row">
-        <span class="toggle-label" style="flex:1">${b.name}${isCustom ? ' <span style="font-size:10px;color:var(--amber)">●</span>' : ''}</span>
+        <span class="toggle-label" style="flex:1">${b.name}${tag}${isCustom ? ' <span style="font-size:10px;color:var(--amber)">●</span>' : ''}${delBtn}</span>
         <span style="font-size:12px;color:var(--muted);margin-right:6px">$</span>
         <input class="week-input" type="number" value="${amt}" data-month="${mk}" data-bill="${b.id}" onchange="updateBillAmount(this)" style="width:70px;margin-right:10px">
         <button class="toggle ${on ? 'on' : ''}" data-month="${mk}" data-bill="${b.id}" onclick="toggleBill(this)"></button>
@@ -504,7 +559,7 @@ function renderSettings() {
     html += '</div></div>';
   });
   html += `<div class="section-title" style="margin-top:20px">Data</div>
-    <button class="reset-btn" onclick="if(confirm('Reset transfers, toggles, and custom bill amounts? Your logged savings contributions will be kept.')){state.transfers={...defaults};state.toggles=JSON.parse(JSON.stringify(defaultToggles));state.amounts={};saveState();renderDashboard();renderProjection();renderSettings();alert('Reset done.');}">Reset Plan to Defaults</button>
+    <button class="reset-btn" onclick="if(confirm('Reset transfers, toggles, custom amounts, and custom bills? Your savings goals and logged contributions will be kept.')){state.transfers={...defaults};state.toggles=JSON.parse(JSON.stringify(defaultToggles));state.amounts={};state.customBills=[];saveState();renderDashboard();renderProjection();renderSettings();alert('Reset done.');}">Reset Plan to Defaults</button>
     <button class="reset-btn" onclick="if(confirm('Delete ALL logged savings contributions? This cannot be undone.')){state.contributions=[];saveState();renderDashboard();renderSavings();alert('Contributions cleared.');}">Clear All Contributions</button>`;
   el.innerHTML = html;
 }
@@ -525,11 +580,58 @@ function updateStart() {
 }
 function toggleBill(btn) {
   const mk = btn.dataset.month, bid = btn.dataset.bill;
-  state.toggles[mk][bid] = !state.toggles[mk][bid];
+  if (!state.toggles[mk]) state.toggles[mk] = {};
+  state.toggles[mk][bid] = state.toggles[mk][bid] === false ? true : false;
   btn.classList.toggle('on');
   saveState();
   renderDashboard();
   renderProjection();
+  renderSettings();
+}
+function addCustomBill() {
+  const name = prompt('Bill name (e.g. Phone):');
+  if (!name) return;
+  const amtRaw = prompt('Amount ($):');
+  const amount = parseFloat(amtRaw);
+  if (isNaN(amount)) return;
+  const dayRaw = prompt('Day of month it\'s due (1-28):');
+  let day = parseInt(dayRaw);
+  if (isNaN(day) || day < 1) day = 1;
+  if (day > 28) day = 28;
+  const rec = prompt('Type R for recurring every month, or O for one-off (just one month):', 'R');
+  const recurring = !rec || rec.trim().toUpperCase().startsWith('R');
+  const bill = { id: 'cb' + Date.now() + Math.random().toString(36).slice(2,6), name, amount, day, recurring };
+  if (!recurring) {
+    const monthRaw = prompt('Which month? Type like "Aug 2026" or "8/2026":');
+    if (!monthRaw) { alert('No month entered. Bill not added.'); return; }
+    const mnames = ['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'];
+    let mIdx = -1, yr = -1;
+    const s = monthRaw.trim().toLowerCase();
+    const slash = s.match(/^(\d{1,2})\s*[\/\-]\s*(\d{4})$/);
+    if (slash) { mIdx = parseInt(slash[1]) - 1; yr = parseInt(slash[2]); }
+    else {
+      const parts = s.split(/\s+/);
+      if (parts.length === 2) {
+        mIdx = mnames.findIndex(n => parts[0].startsWith(n));
+        yr = parseInt(parts[1]);
+      }
+    }
+    if (mIdx < 0 || mIdx > 11 || isNaN(yr)) { alert('Could not read that month. Bill not added.'); return; }
+    bill.month = `${yr}-${mIdx}`;
+  }
+  state.customBills.push(bill);
+  saveState();
+  renderDashboard();
+  renderProjection();
+  renderSettings();
+}
+function delCustomBill(id) {
+  if (!confirm('Delete this custom bill?')) return;
+  state.customBills = state.customBills.filter(b => b.id !== id);
+  saveState();
+  renderDashboard();
+  renderProjection();
+  renderSettings();
 }
 function updateBillAmount(input) {
   const mk = input.dataset.month, bid = input.dataset.bill;
