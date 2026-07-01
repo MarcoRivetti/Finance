@@ -178,7 +178,7 @@
 <script>
 const BILLS = [
   { id: 'gym', name: 'Gym', amount: 40, day: 1 },
-  { id: 'monarch', name: 'Monarch Money', amount: 15, day: 4 },
+  { id: 'monarch', name: 'Monarch Money', amount: 15, day: 23 },
   { id: 'loan101', name: 'Loan 1-101 (2.75%)', amount: 53, day: 12 },
   { id: 'loan102', name: 'Loan 1-102 (5.50%)', amount: 83, day: 12 },
   { id: 'loan103', name: 'Loan 1-103 min (6.53%)', amount: 88, day: 12 },
@@ -289,7 +289,7 @@ function skippedWeeks(year, month, billId) {
 
 function billAmount(year, month, billId) {
   const base = baseBillAmount(year, month, billId);
-  if (!FLEX_BILLS.includes(billId)) return base;
+  if (! FLEX_BILLS.includes(billId)) return base;
   const adjusted = base - weekSlice(year, month, billId) * skippedWeeks(year, month, billId);
   return Math.max(0, adjusted);
 }
@@ -346,7 +346,7 @@ function simulate() {
   const result = [];
   events.forEach(e => {
     if (e.skip) return;
-    if (e.date < startD) return; // already-happened events excluded; balance starts at startBalance
+    if (e.date < startD) return;
     balance += e.amount;
     result.push({ ...e, balance });
   });
