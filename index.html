@@ -145,6 +145,9 @@
     .tl-bubble.done::after { content: '✓'; color: #fff; font-size: 11px; font-weight: 700; }
     .tl-row.done .tl-label, .tl-row.done .tl-amt { text-decoration: line-through; opacity: 0.4; }
     .tl-row.done .tl-bal { opacity: 0.4; }
+    .tl-row.paused .tl-label, .tl-row.paused .tl-amt { text-decoration: line-through; text-decoration-color: var(--red); color: var(--red); opacity: 0.85; }
+    .tl-row.paused .tl-bal { opacity: 0.5; }
+    .tl-paused-tag { font-size: 9px; color: var(--red); font-weight: 700; text-decoration: none; display: inline-block; margin-left: 4px; }
     .tl-day { font-size: 11px; color: var(--muted); font-weight: 600; text-align: center; }
     .tl-label { font-size: 13px; }
     .tl-amt { font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; text-align: right; }
@@ -247,6 +250,7 @@ if (!state.done) state.done = {};
 
 const FLEX_BILLS = ['extra103', 'roth', 'brokerage'];
 let openWeeks = new Set();
+let openMonths = new Set();
 
 function allSavingsAccounts() {
   return [...SAVINGS_ACCOUNTS, ...state.customGoals.map(g => ({ id: g.id, name: g.name, goal: g.target || null, custom: true }))];
@@ -307,7 +311,10 @@ function savedTotal(accountId) {
 function getMonthBills(year, month) {
   const key = `${year}-${month}`;
   const t = state.toggles[key] || {};
-  return billsForMonth(year, month).filter(b => t[b.id] !== false).map(b => ({ ...b, amount: billAmount(year, month, b.id) }));
+  return billsForMonth(year, month).map(b => {
+    const paused = t[b.id] === false;
+    return { ...b, paused, amount: paused ? 0 : billAmount(year, month, b.id) };
+  });
 }
 
 function simulate() {
@@ -326,7 +333,7 @@ function simulate() {
   months.forEach(mk => {
     const [y, m] = mk.split('-').map(Number);
     getMonthBills(y, m).forEach(b => {
-      events.push({ date: new Date(y, m, b.day), type: 'bill', bill: b, amount: -b.amount });
+      events.push({ date: new Date(y, m, b.day), type: 'bill', bill: b, amount: -b.amount, paused: b.paused });
     });
   });
   events.sort((a, b) => {
@@ -339,7 +346,7 @@ function simulate() {
   const result = [];
   events.forEach(e => {
     if (e.skip) return;
-    if (e.date < startD) return;
+    if (e.date < startD) return; // already-happened events excluded; balance starts at startBalance
     balance += e.amount;
     result.push({ ...e, balance });
   });
@@ -375,6 +382,7 @@ function renderDashboard() {
     if (e.date <= now) { liveBalance = e.balance; lastEvent = e; }
     else if (!nextEvent) { nextEvent = e; }
   }
+  const liveClass = liveBalance < 0 ? 'red' : liveBalance < 50 ? 'amber' : 'green';
   const mn = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   let nextLabel = '';
   if (nextEvent) {
@@ -392,6 +400,15 @@ function renderDashboard() {
   if (minBal < 0) alerts = `<div class="alert-card danger"><div class="alert-title">Account Goes Negative</div>Expense account hits ${money(minBal)} on ${fmt(minDate)}. Adjust transfers or pause a bill.</div>`;
   else if (minBal < 50) alerts = `<div class="alert-card warn"><div class="alert-title">Tight Spot Ahead</div>Drops to ${money(minBal)} on ${fmt(minDate)}. Don't charge anything extra that day.</div>`;
   else alerts = `<div class="alert-card ok"><div class="alert-title">All Clear</div>Expense account stays above ${money(minBal)} through Feb 2027.</div>`;
+
+  let totalFreed = 0;
+  Object.keys(state.skips).forEach(k => {
+    const dd = new Date(k + 'T00:00:00');
+    (state.skips[k] || []).forEach(bid => { totalFreed += weekSlice(dd.getFullYear(), dd.getMonth(), bid); });
+  });
+  const freedCard = totalFreed > 0.5
+    ? `<div class="alert-card" style="background:var(--blue-bg);border:1px solid #c0d4ea"><div class="alert-title" style="color:var(--blue)">Freed to Checking via Skips</div><span style="color:var(--blue)">${money(totalFreed)}</span> kept in checking across your paused weeks. Those bills are trimmed to match, so the expense account still balances.</div>`
+    : '';
 
   let savHtml = '';
   allSavingsAccounts().forEach(a => {
@@ -435,6 +452,7 @@ function renderDashboard() {
       <div class="metric-card"><div class="mc-val">${weeksLeft}</div><div class="mc-lbl">Weeks Left</div></div>
     </div>
     ${alerts}
+    ${freedCard}
     <div class="section-title">Savings Tracker (Actual)</div>
     ${savHtml}
     <p style="font-size:12px;color:var(--muted);margin-top:4px">Log real contributions on the Savings tab. These start at $0 and only count what you've actually deposited.</p>
@@ -646,10 +664,30 @@ function renderProjection() {
       const balColor = e.balance < 0 ? 'var(--red)' : e.balance < 50 ? 'var(--amber)' : 'var(--muted)';
       const ek = e.type === 'paycheck' ? `${e.key}|pay` : `${fmtKey(e.date)}|${e.bill ? e.bill.id : 'x'}`;
       const isDone = state.done && state.done[ek];
+
+      if (e.paused) {
+        html += `<div class="tl-row paused">
+          <span></span>
+          <span class="tl-day">${e.date.getDate()}</span>
+          <span class="tl-label">${label}<span class="tl-paused-tag">PAUSED</span></span>
+          <span class="tl-amt">−${money(baseBillAmount(e.date.getFullYear(), e.date.getMonth(), e.bill.id))}</span>
+          <span class="tl-bal">${money(e.balance)}</span>
+        </div>`;
+        return;
+      }
+
+      let paused = '';
+      if (e.type === 'paycheck') {
+        const baseT = state.transfers[e.key] ?? 838;
+        if (e.amount < baseT - 0.5) paused = ` <span style="font-size:9px;color:var(--amber)">−${money(baseT - e.amount)} paused</span>`;
+      } else if (e.bill && FLEX_BILLS.includes(e.bill.id)) {
+        const base = baseBillAmount(e.date.getFullYear(), e.date.getMonth(), e.bill.id);
+        if (Math.abs(e.amount) < base - 0.5) paused = ` <span style="font-size:9px;color:var(--amber)">−${money(base - Math.abs(e.amount))} paused</span>`;
+      }
       html += `<div class="tl-row ${isDone ? 'done' : ''}">
         <button class="tl-bubble ${isDone ? 'done' : ''}" onclick="toggleDone('${ek}', this)"></button>
         <span class="tl-day">${e.date.getDate()}</span>
-        <span class="tl-label">${label}</span>
+        <span class="tl-label">${label}${paused}</span>
         <span class="tl-amt" style="color:${isIn ? 'var(--green)' : 'var(--ink)'}">${isIn ? '+' : '−'}${money(Math.abs(e.amount))}</span>
         <span class="tl-bal" style="color:${balColor}">${money(e.balance)}</span>
       </div>`;
@@ -688,14 +726,15 @@ function renderSettings() {
     </div>
   </div></div>`;
 
-  html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:16px 0 8px"><span class="section-title" style="padding:0">Monthly Bills</span><button class="btn-add" onclick="addCustomBill()">+ Bill</button></div><p style="font-size:12px;color:var(--muted);margin-bottom:12px">Toggle bills on/off and set custom amounts per month. Defaults shown unless changed. Custom bills can be recurring or one-off.</p>';
+  html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:16px 0 8px"><span class="section-title" style="padding:0">Monthly Bills</span><button class="btn-add" onclick="addCustomBill()">+ Bill</button></div><p style="font-size:12px;color:var(--muted);margin-bottom:12px">Toggle bills on/off and set custom amounts per month. Paused bills show red-lined in the Plan timeline. Custom bills can be recurring or one-off.</p>';
   months.forEach(({ y, m }) => {
     const mk = `${y}-${m}`;
     if (!state.toggles[mk]) { state.toggles[mk] = {}; }
     const monthBills = billsForMonth(y, m);
     let monthTotal = 0;
     monthBills.forEach(b => { if ((state.toggles[mk][b.id]) !== false) monthTotal += billAmount(y, m, b.id); });
-    html += `<div class="card"><div class="card-header" onclick="const b=this.nextElementSibling;b.style.display=b.style.display==='none'?'block':'none'"><span class="card-title">${mn[m]} ${y}</span><span style="font-size:13px;font-weight:700;color:var(--green)">${money(monthTotal)}/mo</span></div><div class="card-body" style="display:none">`;
+    const isOpen = openMonths.has(mk);
+    html += `<div class="card"><div class="card-header" onclick="toggleMonthCard('${mk}', this)"><span class="card-title">${mn[m]} ${y}</span><span style="font-size:13px;font-weight:700;color:var(--green)">${money(monthTotal)}/mo</span></div><div class="card-body" style="display:${isOpen ? 'block' : 'none'}">`;
     html += `<div class="month-total"><span>Total active bills</span><span style="color:var(--green)">${money(monthTotal)}</span></div>`;
     monthBills.forEach(b => {
       const on = state.toggles[mk][b.id] !== false;
@@ -739,10 +778,17 @@ function toggleBill(btn) {
   if (!state.toggles[mk]) state.toggles[mk] = {};
   state.toggles[mk][bid] = state.toggles[mk][bid] === false ? true : false;
   btn.classList.toggle('on');
+  openMonths.add(mk);
   saveState();
   renderDashboard();
   renderProjection();
   renderSettings();
+}
+function toggleMonthCard(mk, headerEl) {
+  if (openMonths.has(mk)) openMonths.delete(mk);
+  else openMonths.add(mk);
+  const body = headerEl.nextElementSibling;
+  body.style.display = openMonths.has(mk) ? 'block' : 'none';
 }
 function addCustomBill() {
   const name = prompt('Bill name (e.g. Phone):');
@@ -795,6 +841,7 @@ function updateBillAmount(input) {
   if (!state.amounts[mk]) state.amounts[mk] = {};
   if (isNaN(val)) { delete state.amounts[mk][bid]; }
   else { state.amounts[mk][bid] = val; }
+  openMonths.add(mk);
   saveState();
   renderDashboard();
   renderProjection();
