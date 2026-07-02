@@ -394,7 +394,7 @@ function renderDashboard() {
   const thursdays = getThursdays();
   const cwi = findCurrentWeek();
   const currentKey = fmtKey(thursdays[cwi]);
-  const currentTransfer = state.transfers[currentKey] ?? 838;
+  const currentTransfer = effectiveTransfer(thursdays[cwi]);
   const keeping = 1038 - currentTransfer;
 
   let minBal = Infinity, minDate = null;
@@ -428,17 +428,6 @@ function renderDashboard() {
   if (minBal < 0) alerts = `<div class="alert-card danger"><div class="alert-title">Account Goes Negative</div>Expense account hits ${money(minBal)} on ${fmt(minDate)}. Adjust transfers or pause a bill.</div>`;
   else if (minBal < 50) alerts = `<div class="alert-card warn"><div class="alert-title">Tight Spot Ahead</div>Drops to ${money(minBal)} on ${fmt(minDate)}. Don't charge anything extra that day.</div>`;
   else alerts = `<div class="alert-card ok"><div class="alert-title">All Clear</div>Expense account stays above ${money(minBal)} through Feb 2027.</div>`;
-
-  // Total cash freed to checking via weekly skips + monthly flex pauses
-  let totalFreed = 0;
-  getThursdays().forEach(d => {
-    if (SKIP_DATES.includes(fmtKey(d))) return;
-    const baseT = state.transfers[fmtKey(d)] ?? 838;
-    totalFreed += baseT - effectiveTransfer(d);
-  });
-  const freedCard = totalFreed > 0.5
-    ? `<div class="alert-card" style="background:var(--blue-bg);border:1px solid #c0d4ea"><div class="alert-title" style="color:var(--blue)">Freed to Checking via Skips</div><span style="color:var(--blue)">${money(totalFreed)}</span> kept in checking across your paused weeks. Those bills are trimmed to match, so the expense account still balances.</div>`
-    : '';
 
   let savHtml = '';
   allSavingsAccounts().forEach(a => {
@@ -482,7 +471,6 @@ function renderDashboard() {
       <div class="metric-card"><div class="mc-val">${weeksLeft}</div><div class="mc-lbl">Weeks Left</div></div>
     </div>
     ${alerts}
-    ${freedCard}
     <div class="section-title">Savings Tracker (Actual)</div>
     ${savHtml}
     <p style="font-size:12px;color:var(--muted);margin-top:4px">Log real contributions on the Savings tab. These start at $0 and only count what you've actually deposited.</p>
