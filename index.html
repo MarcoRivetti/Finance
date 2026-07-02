@@ -247,6 +247,7 @@ if (!state.customGoals) state.customGoals = [];
 if (!state.customBills) state.customBills = [];
 if (!state.skips) state.skips = {};
 if (!state.done) state.done = {};
+if (!state.billMeta) state.billMeta = {};
 
 const FLEX_BILLS = ['extra103', 'roth', 'brokerage'];
 let openWeeks = new Set();
@@ -260,7 +261,11 @@ function billsForMonth(year, month) {
   const mk = `${year}-${month}`;
   const recurring = state.customBills.filter(b => b.recurring);
   const oneOff = state.customBills.filter(b => !b.recurring && b.month === mk);
-  return [...BILLS, ...recurring, ...oneOff];
+  return [...BILLS, ...recurring, ...oneOff].map(b => {
+    const meta = state.billMeta[b.id];
+    if (!meta) return b;
+    return { ...b, name: meta.name !== undefined ? meta.name : b.name, day: meta.day !== undefined ? meta.day : b.day };
+  }).sort((a, b) => a.day - b.day);
 }
 
 function paychecksInMonth(year, month) {
@@ -289,7 +294,7 @@ function skippedWeeks(year, month, billId) {
 
 function billAmount(year, month, billId) {
   const base = baseBillAmount(year, month, billId);
-  if (! FLEX_BILLS.includes(billId)) return base;
+  if (!FLEX_BILLS.includes(billId)) return base;
   const adjusted = base - weekSlice(year, month, billId) * skippedWeeks(year, month, billId);
   return Math.max(0, adjusted);
 }
@@ -583,7 +588,7 @@ function renderWeeks() {
     if (paychecksInMonth(y, m) >= 2) {
       html += `<div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;padding:10px 0 4px">Skip a flexible bill this week</div>`;
       FLEX_BILLS.forEach(bid => {
-        const bill = BILLS.find(b => b.id === bid);
+        const bill = billsForMonth(y, m).find(b => b.id === bid);
         if (!bill) return;
         const slice = weekSlice(y, m, bid);
         const isSkipped = skipsThisWeek.includes(bid);
@@ -726,7 +731,7 @@ function renderSettings() {
     </div>
   </div></div>`;
 
-  html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:16px 0 8px"><span class="section-title" style="padding:0">Monthly Bills</span><button class="btn-add" onclick="addCustomBill()">+ Bill</button></div><p style="font-size:12px;color:var(--muted);margin-bottom:12px">Toggle bills on/off and set custom amounts per month. Paused bills show red-lined in the Plan timeline. Custom bills can be recurring or one-off.</p>';
+  html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:16px 0 8px"><span class="section-title" style="padding:0">Monthly Bills</span><button class="btn-add" onclick="addCustomBill()">+ Bill</button></div><p style="font-size:12px;color:var(--muted);margin-bottom:12px">Toggle bills on/off and set custom amounts per month. Bills are ordered by due date. Tap Edit under any default bill to rename it or change its due date. Paused bills show red-lined in the Plan timeline. Custom bills can be recurring or one-off.</p>';
   months.forEach(({ y, m }) => {
     const mk = `${y}-${m}`;
     if (!state.toggles[mk]) { state.toggles[mk] = {}; }
@@ -740,10 +745,19 @@ function renderSettings() {
       const on = state.toggles[mk][b.id] !== false;
       const amt = billAmount(y, m, b.id);
       const isCustom = state.amounts[mk] && state.amounts[mk][b.id] !== undefined;
+      const isDefault = !b.recurring && !b.month;
       const tag = b.recurring ? ' <span style="font-size:9px;color:var(--blue)">RECURRING</span>' : (b.month ? ' <span style="font-size:9px;color:var(--amber)">ONE-OFF</span>' : '');
       const delBtn = (b.recurring || b.month) ? ` <button class="del-btn" style="font-size:14px" onclick="delCustomBill('${b.id}')">×</button>` : '';
+      const metaEdited = isDefault && state.billMeta[b.id] && (state.billMeta[b.id].name !== undefined || state.billMeta[b.id].day !== undefined);
+      const ord = (n) => { const s = ['th','st','nd','rd'], v = n % 100; return n + (s[(v-20)%10] || s[v] || s[0]); };
+      const sub = isDefault
+        ? `<div style="font-size:11px;color:var(--muted);margin-top:1px">Due the ${ord(b.day)}${metaEdited ? ' <span style="color:var(--amber)">· edited</span>' : ''} <button onclick="editBill('${b.id}')" style="background:none;border:none;color:var(--blue);font-size:11px;font-weight:600;cursor:pointer;padding:0 0 0 4px;font-family:inherit">Edit</button></div>`
+        : '';
       html += `<div class="toggle-row">
-        <span class="toggle-label" style="flex:1">${b.name}${tag}${isCustom ? ' <span style="font-size:10px;color:var(--amber)">●</span>' : ''}${delBtn}</span>
+        <span style="flex:1">
+          <span class="toggle-label">${b.name}${tag}${isCustom ? ' <span style="font-size:10px;color:var(--amber)">●</span>' : ''}${delBtn}</span>
+          ${sub}
+        </span>
         <span style="font-size:12px;color:var(--muted);margin-right:6px">$</span>
         <input class="week-input" type="number" value="${amt}" data-month="${mk}" data-bill="${b.id}" onchange="updateBillAmount(this)" style="width:70px;margin-right:10px">
         <button class="toggle ${on ? 'on' : ''}" data-month="${mk}" data-bill="${b.id}" onclick="toggleBill(this)"></button>
@@ -752,7 +766,7 @@ function renderSettings() {
     html += '</div></div>';
   });
   html += `<div class="section-title" style="margin-top:20px">Data</div>
-    <button class="reset-btn" onclick="if(confirm('Reset transfers, toggles, custom amounts, custom bills, and weekly skips? Your savings goals and logged contributions will be kept.')){state.transfers={...defaults};state.toggles=JSON.parse(JSON.stringify(defaultToggles));state.amounts={};state.customBills=[];state.skips={};saveState();renderDashboard();renderProjection();renderSettings();alert('Reset done.');}">Reset Plan to Defaults</button>
+    <button class="reset-btn" onclick="if(confirm('Reset transfers, toggles, custom amounts, custom bills, bill name/date edits, and weekly skips? Your savings goals and logged contributions will be kept.')){state.transfers={...defaults};state.toggles=JSON.parse(JSON.stringify(defaultToggles));state.amounts={};state.customBills=[];state.skips={};state.billMeta={};saveState();renderDashboard();renderProjection();renderSettings();alert('Reset done.');}">Reset Plan to Defaults</button>
     <button class="reset-btn" onclick="if(confirm('Delete ALL logged savings contributions? This cannot be undone.')){state.contributions=[];saveState();renderDashboard();renderSavings();alert('Contributions cleared.');}">Clear All Contributions</button>`;
   el.innerHTML = html;
 }
@@ -789,6 +803,31 @@ function toggleMonthCard(mk, headerEl) {
   else openMonths.add(mk);
   const body = headerEl.nextElementSibling;
   body.style.display = openMonths.has(mk) ? 'block' : 'none';
+}
+function editBill(billId) {
+  const base = BILLS.find(b => b.id === billId);
+  if (!base) return;
+  const meta = state.billMeta[billId] || {};
+  const curName = meta.name !== undefined ? meta.name : base.name;
+  const curDay = meta.day !== undefined ? meta.day : base.day;
+  const newName = prompt('Bill name:', curName);
+  if (newName === null) return;
+  const dayRaw = prompt('Day of month it\'s due (1-28):', String(curDay));
+  if (dayRaw === null) return;
+  let day = parseInt(dayRaw);
+  if (isNaN(day) || day < 1) day = 1;
+  if (day > 28) day = 28;
+  if (!state.billMeta[billId]) state.billMeta[billId] = {};
+  const nm = newName.trim();
+  if (nm === '' || nm === base.name) delete state.billMeta[billId].name;
+  else state.billMeta[billId].name = nm;
+  if (day === base.day) delete state.billMeta[billId].day;
+  else state.billMeta[billId].day = day;
+  if (Object.keys(state.billMeta[billId]).length === 0) delete state.billMeta[billId];
+  saveState();
+  renderDashboard();
+  renderProjection();
+  renderSettings();
 }
 function addCustomBill() {
   const name = prompt('Bill name (e.g. Phone):');
