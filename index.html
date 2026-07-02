@@ -249,6 +249,22 @@ if (!state.skips) state.skips = {};
 if (!state.done) state.done = {};
 if (!state.billMeta) state.billMeta = {};
 
+// One-time migration: earlier versions accidentally saved flexible-bill pauses
+// (roth/brokerage/extra103) across many months. Clear all of them except the
+// intended December 2026 winter-break pause, so bills aren't stuck greyed-out.
+if (!state.migratedFlexPause) {
+  Object.keys(state.toggles || {}).forEach(mk => {
+    if (mk === '2026-11') return; // keep December pause
+    ['roth', 'brokerage', 'extra103'].forEach(bid => {
+      if (state.toggles[mk] && state.toggles[mk][bid] === false) {
+        state.toggles[mk][bid] = true;
+      }
+    });
+  });
+  state.migratedFlexPause = true;
+  saveState();
+}
+
 const FLEX_BILLS = ['extra103', 'roth', 'brokerage'];
 let openWeeks = new Set();
 let openMonths = new Set();
