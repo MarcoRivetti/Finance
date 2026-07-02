@@ -302,10 +302,17 @@ function billAmount(year, month, billId) {
 function effectiveTransfer(d) {
   const k = fmtKey(d);
   let t = state.transfers[k] ?? 838;
-  if (state.skips[k]) {
-    const y = d.getFullYear(), m = d.getMonth();
-    state.skips[k].forEach(billId => { t -= weekSlice(y, m, billId); });
-  }
+  const y = d.getFullYear(), m = d.getMonth();
+  const mk = `${y}-${m}`;
+  const tog = state.toggles[mk] || {};
+  const skipped = state.skips[k] || [];
+  FLEX_BILLS.forEach(billId => {
+    const monthPaused = tog[billId] === false;
+    const weekSkipped = skipped.includes(billId);
+    // Subtract this week's slice if the bill is skipped this week OR paused for the whole month.
+    // Guard against double-subtracting when both are set.
+    if (monthPaused || weekSkipped) t -= weekSlice(y, m, billId);
+  });
   return Math.max(0, t);
 }
 
@@ -406,10 +413,12 @@ function renderDashboard() {
   else if (minBal < 50) alerts = `<div class="alert-card warn"><div class="alert-title">Tight Spot Ahead</div>Drops to ${money(minBal)} on ${fmt(minDate)}. Don't charge anything extra that day.</div>`;
   else alerts = `<div class="alert-card ok"><div class="alert-title">All Clear</div>Expense account stays above ${money(minBal)} through Feb 2027.</div>`;
 
+  // Total cash freed to checking via weekly skips + monthly flex pauses
   let totalFreed = 0;
-  Object.keys(state.skips).forEach(k => {
-    const dd = new Date(k + 'T00:00:00');
-    (state.skips[k] || []).forEach(bid => { totalFreed += weekSlice(dd.getFullYear(), dd.getMonth(), bid); });
+  getThursdays().forEach(d => {
+    if (SKIP_DATES.includes(fmtKey(d))) return;
+    const baseT = state.transfers[fmtKey(d)] ?? 838;
+    totalFreed += baseT - effectiveTransfer(d);
   });
   const freedCard = totalFreed > 0.5
     ? `<div class="alert-card" style="background:var(--blue-bg);border:1px solid #c0d4ea"><div class="alert-title" style="color:var(--blue)">Freed to Checking via Skips</div><span style="color:var(--blue)">${money(totalFreed)}</span> kept in checking across your paused weeks. Those bills are trimmed to match, so the expense account still balances.</div>`
@@ -591,7 +600,16 @@ function renderWeeks() {
         const bill = billsForMonth(y, m).find(b => b.id === bid);
         if (!bill) return;
         const slice = weekSlice(y, m, bid);
+        const monthPaused = (state.toggles[`${y}-${m}`] || {})[bid] === false;
         const isSkipped = skipsThisWeek.includes(bid);
+        if (monthPaused) {
+          html += `<div class="toggle-row" style="opacity:0.7">
+            <span class="toggle-label" style="flex:1">${bill.name}</span>
+            <span style="font-size:12px;color:var(--amber);margin-right:10px">paused all month · ${money(slice)}/wk</span>
+            <button class="toggle on" disabled style="opacity:0.55;cursor:default"></button>
+          </div>`;
+          return;
+        }
         html += `<div class="toggle-row">
           <span class="toggle-label" style="flex:1">${bill.name}</span>
           <span style="font-size:12px;color:var(--muted);margin-right:10px">${isSkipped ? 'skipping ' : ''}${money(slice)}/wk</span>
@@ -731,7 +749,7 @@ function renderSettings() {
     </div>
   </div></div>`;
 
-  html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:16px 0 8px"><span class="section-title" style="padding:0">Monthly Bills</span><button class="btn-add" onclick="addCustomBill()">+ Bill</button></div><p style="font-size:12px;color:var(--muted);margin-bottom:12px">Toggle bills on/off and set custom amounts per month. Bills are ordered by due date. Tap Edit under any default bill to rename it or change its due date. Paused bills show red-lined in the Plan timeline. Custom bills can be recurring or one-off.</p>';
+  html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:16px 0 8px"><span class="section-title" style="padding:0">Monthly Bills</span><button class="btn-add" onclick="addCustomBill()">+ Bill</button></div><p style="font-size:12px;color:var(--muted);margin-bottom:12px">Toggle bills on/off and set custom amounts per month. Bills are ordered by due date. Pausing a flexible bill (Extra, Roth, Brokerage) also frees its weekly cash to checking. Tap Edit under any default bill to rename it or change its due date. Paused bills show red-lined in the Plan timeline. Custom bills can be recurring or one-off.</p>';
   months.forEach(({ y, m }) => {
     const mk = `${y}-${m}`;
     if (!state.toggles[mk]) { state.toggles[mk] = {}; }
@@ -796,6 +814,7 @@ function toggleBill(btn) {
   saveState();
   renderDashboard();
   renderProjection();
+  renderWeeks();
   renderSettings();
 }
 function toggleMonthCard(mk, headerEl) {
