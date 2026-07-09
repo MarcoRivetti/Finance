@@ -268,6 +268,7 @@ if (!state.migratedFlexPause) {
 const FLEX_BILLS = ['extra103', 'roth', 'brokerage'];
 let openWeeks = new Set();
 let openMonths = new Set();
+let openPlanMonths = null;
 
 function allSavingsAccounts() {
   return [...SAVINGS_ACCOUNTS, ...state.customGoals.map(g => ({ id: g.id, name: g.name, goal: g.target || null, custom: true }))];
@@ -361,7 +362,17 @@ function simulate() {
   months.forEach(mk => {
     const [y, m] = mk.split('-').map(Number);
     getMonthBills(y, m).forEach(b => {
-      events.push({ date: new Date(y, m, b.day), type: 'bill', bill: b, amount: -b.amount, paused: b.paused });
+      const dueDate = new Date(y, m, b.day);
+      // If this bill is checked off (paid) and its due date is still in the future,
+      // treat it as posting today so the live balance reflects the early payment.
+      const ek = `${fmtKey(dueDate)}|${b.id}`;
+      let postDate = dueDate;
+      let paidEarly = false;
+      if (state.done && state.done[ek] && !b.paused) {
+        const today = new Date(); today.setHours(0, 0, 0, 0);
+        if (dueDate > today) { postDate = today; paidEarly = true; }
+      }
+      events.push({ date: postDate, dueDate, type: 'bill', bill: b, amount: -b.amount, paused: b.paused, paidEarly });
     });
   });
   events.sort((a, b) => {
@@ -657,26 +668,31 @@ function renderProjection() {
   const sim = simulate();
   const mn = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
+  // Group events by month (bills group by their due month, even if paid early)
   const byMonth = {};
   sim.events.forEach(e => {
-    const mk = `${e.date.getFullYear()}-${e.date.getMonth()}`;
+    const groupDate = e.type === 'bill' ? e.dueDate : e.date;
+    const mk = `${groupDate.getFullYear()}-${groupDate.getMonth()}`;
     if (!byMonth[mk]) byMonth[mk] = [];
     byMonth[mk].push(e);
   });
 
   const now = new Date();
   const curMk = `${now.getFullYear()}-${now.getMonth()}`;
+  // First render defaults to the current month open; after that we track the user's expansions.
+  if (openPlanMonths === null) { openPlanMonths = new Set([curMk]); }
   let html = '<div class="section-title">Expense Account Timeline</div>';
 
   Object.keys(byMonth).forEach(mk => {
     const [y, m] = mk.split('-').map(Number);
     const events = byMonth[mk];
-    const closeBal = events[events.length - 1].balance;
+    // Closing balance = balance after the latest-posting event in this month group
+    const closeBal = events.reduce((acc, e) => (e.date >= acc.date ? e : acc), events[0]).balance;
     const closeColor = closeBal < 0 ? 'var(--red)' : closeBal < 50 ? 'var(--amber)' : 'var(--green)';
-    const isOpen = mk === curMk;
+    const isOpen = openPlanMonths.has(mk);
 
     html += `<div class="tl-month">
-      <div class="tl-head" onclick="const b=this.nextElementSibling;b.style.display=b.style.display==='none'?'block':'none';this.querySelector('.tl-chev').textContent=b.style.display==='none'?'▸':'▾'">
+      <div class="tl-head" onclick="togglePlanMonth('${mk}', this)">
         <span class="tl-month-name">${mn[m]} ${y}</span>
         <span class="tl-head-right">
           <span class="tl-close" style="color:${closeColor}">${money(closeBal)}</span>
@@ -689,32 +705,35 @@ function renderProjection() {
       const isIn = e.amount >= 0;
       const label = e.type === 'paycheck' ? 'Paycheck' : (e.bill ? e.bill.name : '');
       const balColor = e.balance < 0 ? 'var(--red)' : e.balance < 50 ? 'var(--amber)' : 'var(--muted)';
-      const ek = e.type === 'paycheck' ? `${e.key}|pay` : `${fmtKey(e.date)}|${e.bill ? e.bill.id : 'x'}`;
+      const dueDay = (e.type === 'bill' ? e.dueDate : e.date).getDate();
+      const ek = e.type === 'paycheck' ? `${e.key}|pay` : `${fmtKey(e.dueDate)}|${e.bill ? e.bill.id : 'x'}`;
       const isDone = state.done && state.done[ek];
 
       if (e.paused) {
         html += `<div class="tl-row paused">
           <span></span>
-          <span class="tl-day">${e.date.getDate()}</span>
+          <span class="tl-day">${dueDay}</span>
           <span class="tl-label">${label}<span class="tl-paused-tag">PAUSED</span></span>
-          <span class="tl-amt">−${money(baseBillAmount(e.date.getFullYear(), e.date.getMonth(), e.bill.id))}</span>
+          <span class="tl-amt">−${money(baseBillAmount(e.dueDate.getFullYear(), e.dueDate.getMonth(), e.bill.id))}</span>
           <span class="tl-bal">${money(e.balance)}</span>
         </div>`;
         return;
       }
 
+      // Detect skip-reduced lines
       let paused = '';
       if (e.type === 'paycheck') {
         const baseT = state.transfers[e.key] ?? 838;
         if (e.amount < baseT - 0.5) paused = ` <span style="font-size:9px;color:var(--amber)">−${money(baseT - e.amount)} paused</span>`;
       } else if (e.bill && FLEX_BILLS.includes(e.bill.id)) {
-        const base = baseBillAmount(e.date.getFullYear(), e.date.getMonth(), e.bill.id);
+        const base = baseBillAmount(e.dueDate.getFullYear(), e.dueDate.getMonth(), e.bill.id);
         if (Math.abs(e.amount) < base - 0.5) paused = ` <span style="font-size:9px;color:var(--amber)">−${money(base - Math.abs(e.amount))} paused</span>`;
       }
+      const earlyTag = e.paidEarly ? ` <span style="font-size:9px;color:var(--green)">paid early ${mn[e.date.getMonth()]} ${e.date.getDate()}</span>` : '';
       html += `<div class="tl-row ${isDone ? 'done' : ''}">
         <button class="tl-bubble ${isDone ? 'done' : ''}" onclick="toggleDone('${ek}', this)"></button>
-        <span class="tl-day">${e.date.getDate()}</span>
-        <span class="tl-label">${label}${paused}</span>
+        <span class="tl-day">${dueDay}</span>
+        <span class="tl-label">${label}${paused}${earlyTag}</span>
         <span class="tl-amt" style="color:${isIn ? 'var(--green)' : 'var(--ink)'}">${isIn ? '+' : '−'}${money(Math.abs(e.amount))}</span>
         <span class="tl-bal" style="color:${balColor}">${money(e.balance)}</span>
       </div>`;
@@ -726,12 +745,23 @@ function renderProjection() {
   el.innerHTML = html;
 }
 
+function togglePlanMonth(mk, headerEl) {
+  if (openPlanMonths === null) openPlanMonths = new Set();
+  if (openPlanMonths.has(mk)) openPlanMonths.delete(mk);
+  else openPlanMonths.add(mk);
+  const body = headerEl.nextElementSibling;
+  const open = openPlanMonths.has(mk);
+  body.style.display = open ? 'block' : 'none';
+  headerEl.querySelector('.tl-chev').textContent = open ? '▾' : '▸';
+}
 function toggleDone(ek, btn) {
   if (state.done[ek]) delete state.done[ek];
   else state.done[ek] = true;
   saveState();
-  btn.classList.toggle('done');
-  btn.closest('.tl-row').classList.toggle('done');
+  // A checked-off bill whose due date is still in the future posts today,
+  // so re-render the dashboard and timeline to reflect the shifted balance.
+  renderDashboard();
+  renderProjection();
 }
 
 function renderSettings() {
