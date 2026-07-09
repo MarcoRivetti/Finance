@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="theme-color" content="#000000">
@@ -32,14 +32,15 @@
       --radius-sm: 11px;
     }
     * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html { background: var(--bg); }
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
       background: var(--bg);
       color: var(--ink);
       line-height: 1.4;
-      max-width: 480px;
+      max-width: 520px;
       margin: 0 auto;
-      padding: 0 0 92px 0;
+      padding: 0 0 calc(78px + env(safe-area-inset-bottom, 0px)) 0;
       min-height: 100vh;
       -webkit-font-smoothing: antialiased;
       letter-spacing: -0.01em;
@@ -49,7 +50,7 @@
       -webkit-backdrop-filter: saturate(180%) blur(20px);
       backdrop-filter: saturate(180%) blur(20px);
       color: var(--ink);
-      padding: 56px 20px 10px;
+      padding: calc(env(safe-area-inset-top, 0px) + 14px) 20px 10px;
       position: sticky; top: 0; z-index: 100;
       border-bottom: 0.5px solid var(--hairline);
     }
@@ -62,12 +63,13 @@
       -webkit-backdrop-filter: saturate(180%) blur(20px);
       backdrop-filter: saturate(180%) blur(20px);
       border-top: 0.5px solid var(--hairline);
-      position: fixed; bottom: 0; left: 50%; transform: translateX(-50%);
-      width: 100%; max-width: 480px; z-index: 99;
-      padding-bottom: env(safe-area-inset-bottom, 0);
+      position: fixed; bottom: 0; left: 0; right: 0; z-index: 99;
+      margin: 0 auto;
+      max-width: 520px;
+      padding: 6px max(env(safe-area-inset-left, 0px), 6px) calc(env(safe-area-inset-bottom, 0px) + 4px) max(env(safe-area-inset-right, 0px), 6px);
     }
     .tab {
-      flex: 1; padding: 8px 4px 7px; text-align: center;
+      flex: 1; padding: 4px 2px; text-align: center;
       font-size: 10px; font-weight: 500; color: var(--muted);
       border: none; background: none; cursor: pointer;
       transition: color 0.15s;
