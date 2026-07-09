@@ -4,90 +4,119 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#000000">
   <meta name="apple-mobile-web-app-title" content="Budget">
   <link rel="apple-touch-icon" href="apple-touch-icon.png">
   <link rel="icon" type="image/png" href="apple-touch-icon.png">
   <title>Budget Tracker</title>
   <style>
     :root {
-      --bg: #f5f2ed;
-      --card: #ffffff;
-      --ink: #1a1a1a;
-      --muted: #7a7670;
-      --border: #e4e0da;
-      --green: #2d6a4f;
-      --green-bg: #e8f3ed;
-      --red: #a4243b;
-      --red-bg: #fce8ec;
-      --amber: #b45309;
-      --amber-bg: #fef3e2;
-      --blue: #1e4a7a;
-      --blue-bg: #e8f0fa;
+      --bg: #000000;
+      --card: #1c1c1e;
+      --card2: #2c2c2e;
+      --ink: #f2f2f0;
+      --muted: #98989f;
+      --muted2: #5a5a5f;
+      --border: #2c2c2e;
+      --hairline: rgba(120,120,128,0.32);
+      --green: #30d158;
+      --green-bg: #10331d;
+      --red: #ff453a;
+      --red-bg: #3a1512;
+      --amber: #ff9f0a;
+      --amber-bg: #3a2708;
+      --blue: #0a84ff;
+      --blue-bg: #0a2540;
+      --radius: 16px;
+      --radius-sm: 11px;
     }
     * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
     body {
-      font-family: -apple-system, system-ui, 'Segoe UI', sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
       background: var(--bg);
       color: var(--ink);
-      line-height: 1.45;
+      line-height: 1.4;
       max-width: 480px;
       margin: 0 auto;
-      padding: 0 0 80px 0;
+      padding: 0 0 92px 0;
       min-height: 100vh;
       -webkit-font-smoothing: antialiased;
+      letter-spacing: -0.01em;
     }
     .header {
-      background: var(--ink);
-      color: #fff;
-      padding: 52px 20px 20px;
+      background: rgba(0,0,0,0.7);
+      -webkit-backdrop-filter: saturate(180%) blur(20px);
+      backdrop-filter: saturate(180%) blur(20px);
+      color: var(--ink);
+      padding: 56px 20px 10px;
       position: sticky; top: 0; z-index: 100;
+      border-bottom: 0.5px solid var(--hairline);
     }
-    .header h1 { font-size: 20px; font-weight: 700; letter-spacing: -0.3px; }
-    .header-sub { font-size: 12px; color: rgba(255,255,255,0.5); margin-top: 2px; }
+    .header h1 { font-size: 28px; font-weight: 700; letter-spacing: -0.4px; }
+    .header-sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
+
     .tabs {
       display: flex;
-      background: var(--card);
-      border-bottom: 1px solid var(--border);
-      position: sticky; top: 94px; z-index: 99;
+      background: rgba(22,22,24,0.92);
+      -webkit-backdrop-filter: saturate(180%) blur(20px);
+      backdrop-filter: saturate(180%) blur(20px);
+      border-top: 0.5px solid var(--hairline);
+      position: fixed; bottom: 0; left: 50%; transform: translateX(-50%);
+      width: 100%; max-width: 480px; z-index: 99;
+      padding-bottom: env(safe-area-inset-bottom, 0);
     }
     .tab {
-      flex: 1; padding: 12px 4px; text-align: center;
-      font-size: 12px; font-weight: 600; color: var(--muted);
+      flex: 1; padding: 8px 4px 7px; text-align: center;
+      font-size: 10px; font-weight: 500; color: var(--muted);
       border: none; background: none; cursor: pointer;
-      border-bottom: 2px solid transparent; transition: all 0.15s;
+      transition: color 0.15s;
+      display: flex; flex-direction: column; align-items: center; gap: 3px;
     }
-    .tab.active { color: var(--ink); border-bottom-color: var(--ink); }
-    .panel { display: none; padding: 16px; }
+    .tab svg { width: 25px; height: 25px; display: block; }
+    .tab svg * { fill: var(--muted); transition: fill 0.15s; }
+    .tab.active { color: var(--blue); }
+    .tab.active svg * { fill: var(--blue); }
+    .panel { display: none; padding: 16px 16px 8px; }
     .panel.active { display: block; }
 
-    .metric-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px; }
-    .metric-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 14px; }
-    .mc-val { font-size: 24px; font-weight: 700; letter-spacing: -0.5px; }
+    .metric-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+    .metric-card { background: var(--card); border-radius: var(--radius); padding: 15px 16px; }
+    .mc-val { font-size: 26px; font-weight: 700; letter-spacing: -0.6px; }
     .mc-val.green { color: var(--green); }
     .mc-val.red { color: var(--red); }
     .mc-val.amber { color: var(--amber); }
-    .mc-lbl { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; margin-top: 2px; }
+    .mc-lbl { font-size: 12px; color: var(--muted); margin-top: 3px; letter-spacing: -0.1px; }
 
-    .section-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: var(--muted); padding: 16px 0 8px; }
-    .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; margin-bottom: 10px; overflow: hidden; }
-    .card-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; cursor: pointer; }
-    .card-title { font-size: 14px; font-weight: 600; }
+    .hero { border-radius: var(--radius); margin-bottom: 12px; padding: 20px 18px 17px; }
+    .hero.ok { background: linear-gradient(135deg, #1c7a34, #30d158); }
+    .hero.warn { background: linear-gradient(135deg, #a85c00, #ff9f0a); }
+    .hero.bad { background: linear-gradient(135deg, #931009, #ff453a); }
+    .hero-lbl { font-size: 13px; color: rgba(255,255,255,0.85); font-weight: 500; }
+    .hero-val { font-size: 46px; font-weight: 700; letter-spacing: -1.6px; margin: 3px 0 6px; color: #fff; }
+    .hero-sub { font-size: 13px; color: rgba(255,255,255,0.9); }
+    .hero-sub2 { font-size: 13px; color: rgba(255,255,255,0.68); margin-top: 1px; }
+
+    .section-title { font-size: 13px; font-weight: 600; letter-spacing: -0.1px; color: var(--muted); padding: 18px 6px 7px; }
+    .card { background: var(--card); border-radius: var(--radius); margin-bottom: 12px; overflow: hidden; }
+    .card-header { display: flex; align-items: center; justify-content: space-between; padding: 15px 16px; cursor: pointer; }
+    .card-header:active { background: var(--card2); }
+    .card-title { font-size: 16px; font-weight: 600; letter-spacing: -0.2px; }
     .card-body { padding: 0 16px 14px; }
-    .badge { font-size: 10px; font-weight: 700; padding: 3px 8px; border-radius: 99px; text-transform: uppercase; letter-spacing: 0.3px; }
+    .badge { font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: 99px; letter-spacing: -0.1px; }
     .badge-green { background: var(--green-bg); color: var(--green); }
     .badge-red { background: var(--red-bg); color: var(--red); }
 
-    .week-row { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid var(--border); }
+    .week-row { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 0.5px solid var(--hairline); }
     .week-row:last-child { border-bottom: none; }
     .week-row.current { background: var(--green-bg); }
     .week-row.skip { background: var(--red-bg); opacity: 0.7; }
-    .week-date { font-size: 13px; font-weight: 600; }
-    .week-meta { font-size: 11px; color: var(--muted); }
-    .week-input { width: 80px; font-size: 15px; font-weight: 600; text-align: right; border: 1px solid var(--border); border-radius: 8px; padding: 6px 8px; background: var(--bg); font-family: inherit; color: var(--ink); }
-    .week-input:focus { outline: none; border-color: var(--green); background: #fff; }
+    .week-date { font-size: 15px; font-weight: 600; }
+    .week-meta { font-size: 12px; color: var(--muted); }
+    .week-input { width: 82px; font-size: 17px; font-weight: 600; text-align: right; border: none; border-radius: var(--radius-sm); padding: 8px 10px; background: var(--card2); font-family: inherit; color: var(--ink); }
+    .week-input:focus { outline: 2px solid var(--blue); }
 
-    .flow-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+    .flow-row { display: flex; justify-content: space-between; align-items: center; padding: 9px 0; border-bottom: 0.5px solid var(--hairline); font-size: 15px; }
     .flow-row:last-child { border-bottom: none; }
     .flow-label { color: var(--muted); }
     .flow-val { font-weight: 600; font-variant-numeric: tabular-nums; }
@@ -95,78 +124,87 @@
     .flow-val.pos { color: var(--green); }
     .flow-val.amber { color: var(--amber); }
 
-    .alert-card { border-radius: 12px; padding: 14px 16px; margin-bottom: 10px; font-size: 13px; }
-    .alert-card.warn { background: var(--amber-bg); border: 1px solid #e8d5b0; }
-    .alert-card.danger { background: var(--red-bg); border: 1px solid #e8c4c4; }
-    .alert-card.ok { background: var(--green-bg); border: 1px solid #c3d9c1; }
-    .alert-title { font-weight: 700; margin-bottom: 4px; }
+    .alert-card { border-radius: var(--radius); padding: 14px 16px; margin-bottom: 12px; font-size: 14px; }
+    .alert-card.warn { background: var(--amber-bg); color: #ffd591; }
+    .alert-card.danger { background: var(--red-bg); color: #ffb3ad; }
+    .alert-card.ok { background: var(--green-bg); color: #9be8ac; }
+    .alert-title { font-weight: 600; margin-bottom: 3px; letter-spacing: -0.2px; color: var(--ink); }
 
-    .progress-bar { height: 8px; background: var(--border); border-radius: 4px; margin-top: 8px; overflow: hidden; }
-    .progress-fill { height: 100%; background: var(--green); border-radius: 4px; transition: width 0.3s; }
+    .progress-bar { height: 8px; background: var(--card2); border-radius: 99px; margin-top: 9px; overflow: hidden; }
+    .progress-fill { height: 100%; background: var(--green); border-radius: 99px; transition: width 0.3s; }
 
-    .sav-account { background: var(--card); border: 1px solid var(--border); border-radius: 12px; margin-bottom: 12px; padding: 16px; }
+    .sav-account { background: var(--card); border-radius: var(--radius); margin-bottom: 12px; padding: 16px; }
     .sav-head { display: flex; justify-content: space-between; align-items: baseline; }
-    .sav-name { font-size: 14px; font-weight: 600; }
-    .sav-total { font-size: 20px; font-weight: 700; color: var(--green); }
-    .sav-goal { font-size: 11px; color: var(--muted); margin-top: 2px; }
-    .add-form { display: flex; gap: 8px; margin-top: 12px; }
-    .add-input { flex: 1; font-size: 14px; border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; background: var(--bg); font-family: inherit; color: var(--ink); min-width: 0; }
-    .add-input:focus { outline: none; border-color: var(--green); background: #fff; }
-    .add-btn { background: var(--green); color: #fff; border: none; border-radius: 8px; padding: 8px 16px; font-size: 14px; font-weight: 600; cursor: pointer; font-family: inherit; flex-shrink: 0; }
-    .log-entry { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+    .sav-name { font-size: 16px; font-weight: 600; letter-spacing: -0.2px; }
+    .sav-total { font-size: 22px; font-weight: 700; color: var(--green); letter-spacing: -0.4px; }
+    .sav-goal { font-size: 12px; color: var(--muted); margin-top: 3px; }
+    .add-form { display: flex; gap: 8px; margin-top: 14px; }
+    .add-input { flex: 1; font-size: 16px; border: none; border-radius: var(--radius-sm); padding: 10px 12px; background: var(--card2); font-family: inherit; color: var(--ink); min-width: 0; }
+    .add-input:focus { outline: 2px solid var(--blue); }
+    .add-btn { background: var(--blue); color: #fff; border: none; border-radius: var(--radius-sm); padding: 10px 18px; font-size: 16px; font-weight: 600; cursor: pointer; font-family: inherit; flex-shrink: 0; }
+    .add-btn:active { opacity: 0.75; }
+    .log-entry { display: flex; justify-content: space-between; align-items: center; padding: 9px 0; border-bottom: 0.5px solid var(--hairline); font-size: 15px; }
     .log-entry:last-child { border-bottom: none; }
-    .log-date { color: var(--muted); font-size: 12px; }
+    .log-date { color: var(--muted); font-size: 13px; }
     .log-amt { font-weight: 600; color: var(--green); }
-    .del-btn { background: none; border: none; color: var(--red); font-size: 18px; cursor: pointer; padding: 0 4px; margin-left: 8px; }
-    .log-empty { font-size: 12px; color: var(--muted); padding: 8px 0; font-style: italic; }
+    .del-btn { background: none; border: none; color: var(--red); font-size: 20px; cursor: pointer; padding: 0 4px; margin-left: 8px; }
+    .log-empty { font-size: 13px; color: var(--muted); padding: 9px 0; }
 
-    .toggle-row { display: flex; align-items: center; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid var(--border); }
+    .toggle-row { display: flex; align-items: center; justify-content: space-between; padding: 11px 0; border-bottom: 0.5px solid var(--hairline); }
     .toggle-row:last-child { border-bottom: none; }
-    .toggle-label { font-size: 13px; }
-    .toggle-amount { font-size: 13px; color: var(--muted); margin-left: auto; margin-right: 12px; }
-    .toggle { width: 44px; height: 26px; background: #ccc; border-radius: 13px; position: relative; cursor: pointer; transition: background 0.2s; flex-shrink: 0; border: none; }
+    .toggle-label { font-size: 15px; letter-spacing: -0.2px; }
+    .toggle-amount { font-size: 15px; color: var(--muted); margin-left: auto; margin-right: 12px; }
+    .toggle { width: 51px; height: 31px; background: var(--muted2); border-radius: 99px; position: relative; cursor: pointer; transition: background 0.25s; flex-shrink: 0; border: none; }
     .toggle.on { background: var(--green); }
-    .toggle::after { content: ''; width: 22px; height: 22px; background: #fff; border-radius: 50%; position: absolute; top: 2px; left: 2px; transition: transform 0.2s; box-shadow: 0 1px 3px rgba(0,0,0,0.15); }
-    .toggle.on::after { transform: translateX(18px); }
+    .toggle::after { content: ''; width: 27px; height: 27px; background: #fff; border-radius: 50%; position: absolute; top: 2px; left: 2px; transition: transform 0.25s cubic-bezier(0.4,0.9,0.5,1.2); box-shadow: 0 3px 8px rgba(0,0,0,0.15), 0 1px 1px rgba(0,0,0,0.16); }
+    .toggle.on::after { transform: translateX(20px); }
 
-    .reset-btn { width: 100%; padding: 14px; background: var(--red-bg); color: var(--red); border: 1px solid #e8c4c4; border-radius: 12px; font-size: 14px; font-weight: 600; cursor: pointer; margin-top: 16px; font-family: inherit; }
-    .btn-add { font-size: 12px; font-weight: 600; background: var(--green-bg); color: var(--green); border: 1px solid #c3d9c1; border-radius: 8px; padding: 7px 14px; cursor: pointer; font-family: inherit; flex-shrink: 0; }
-    .month-total { display: flex; justify-content: space-between; align-items: center; padding: 8px 0 12px; margin-bottom: 8px; border-bottom: 2px solid var(--border); font-size: 13px; font-weight: 600; }
-    .tl-month { background: var(--card); border: 1px solid var(--border); border-radius: 12px; margin-bottom: 10px; overflow: hidden; }
-    .tl-head { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; cursor: pointer; }
-    .tl-month-name { font-size: 15px; font-weight: 700; }
+    .reset-btn { width: 100%; padding: 15px; background: var(--card); color: var(--red); border: none; border-radius: var(--radius); font-size: 16px; font-weight: 500; cursor: pointer; margin-top: 12px; font-family: inherit; }
+    .reset-btn:active { background: var(--card2); }
+    .btn-add { font-size: 15px; font-weight: 500; background: none; color: var(--blue); border: none; padding: 6px 4px; cursor: pointer; font-family: inherit; flex-shrink: 0; }
+    .btn-add:active { opacity: 0.5; }
+    .month-total { display: flex; justify-content: space-between; align-items: center; padding: 10px 0 12px; margin-bottom: 6px; border-bottom: 0.5px solid var(--hairline); font-size: 15px; font-weight: 600; }
+    .tl-month { background: var(--card); border-radius: var(--radius); margin-bottom: 12px; overflow: hidden; }
+    .tl-head { display: flex; align-items: center; justify-content: space-between; padding: 15px 16px; cursor: pointer; }
+    .tl-head:active { background: var(--card2); }
+    .tl-month-name { font-size: 17px; font-weight: 700; letter-spacing: -0.3px; }
     .tl-head-right { display: flex; align-items: center; gap: 10px; }
-    .tl-close { font-size: 16px; font-weight: 700; font-variant-numeric: tabular-nums; }
-    .tl-chev { font-size: 11px; color: var(--muted); }
+    .tl-close { font-size: 17px; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -0.3px; }
+    .tl-chev { font-size: 13px; color: var(--muted2); }
     .tl-body { padding: 0 16px 8px; }
-    .tl-row { display: grid; grid-template-columns: 22px 22px 1fr auto auto; align-items: center; gap: 9px; padding: 9px 0; border-top: 1px solid var(--border); }
-    .tl-bubble { width: 20px; height: 20px; border-radius: 50%; border: 2px solid var(--border); cursor: pointer; flex-shrink: 0; display: flex; align-items: center; justify-content: center; background: none; padding: 0; transition: all 0.15s; }
+    .tl-row { display: grid; grid-template-columns: 26px 22px 1fr auto auto; align-items: center; gap: 10px; padding: 10px 0; border-top: 0.5px solid var(--hairline); }
+    .tl-bubble { width: 24px; height: 24px; border-radius: 50%; border: 1.8px solid var(--muted2); cursor: pointer; flex-shrink: 0; display: flex; align-items: center; justify-content: center; background: none; padding: 0; transition: all 0.15s; }
     .tl-bubble.done { background: var(--green); border-color: var(--green); }
-    .tl-bubble.done::after { content: '✓'; color: #fff; font-size: 11px; font-weight: 700; }
+    .tl-bubble.done::after { content: '✓'; color: #fff; font-size: 13px; font-weight: 700; }
     .tl-row.done .tl-label, .tl-row.done .tl-amt { text-decoration: line-through; opacity: 0.4; }
     .tl-row.done .tl-bal { opacity: 0.4; }
     .tl-row.paused .tl-label, .tl-row.paused .tl-amt { text-decoration: line-through; text-decoration-color: var(--red); color: var(--red); opacity: 0.85; }
     .tl-row.paused .tl-bal { opacity: 0.5; }
-    .tl-paused-tag { font-size: 9px; color: var(--red); font-weight: 700; text-decoration: none; display: inline-block; margin-left: 4px; }
-    .tl-day { font-size: 11px; color: var(--muted); font-weight: 600; text-align: center; }
-    .tl-label { font-size: 13px; }
-    .tl-amt { font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; text-align: right; }
-    .tl-bal { font-size: 11px; font-variant-numeric: tabular-nums; text-align: right; min-width: 54px; }
+    .tl-paused-tag { font-size: 10px; color: var(--red); font-weight: 600; text-decoration: none; display: inline-block; margin-left: 4px; }
+    .tl-day { font-size: 12px; color: var(--muted); font-weight: 600; text-align: center; }
+    .tl-label { font-size: 15px; letter-spacing: -0.2px; }
+    .tl-amt { font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; text-align: right; }
+    .tl-bal { font-size: 12px; font-variant-numeric: tabular-nums; text-align: right; min-width: 56px; color: var(--muted); }
   </style>
 </head>
 <body>
 
 <div class="header">
-  <h1>Budget Tracker</h1>
-  <div class="header-sub">Paid Thursdays · Expense Account System · Jun 2026 – Feb 2027</div>
+  <h1>Budget</h1>
+  <div class="header-sub">Paid Thursdays · Expense Account · Jun 2026 – Feb 2027</div>
 </div>
 
 <div class="tabs">
-  <button class="tab active" data-tab="dashboard" onclick="switchTab('dashboard')">Home</button>
-  <button class="tab" data-tab="savings" onclick="switchTab('savings')">Savings</button>
-  <button class="tab" data-tab="weeks" onclick="switchTab('weeks')">Weeks</button>
-  <button class="tab" data-tab="projection" onclick="switchTab('projection')">Plan</button>
-  <button class="tab" data-tab="settings" onclick="switchTab('settings')">More</button>
+  <button class="tab active" data-tab="dashboard" onclick="switchTab('dashboard')">
+    <svg viewBox="0 0 24 24"><path d="M12 3.2 3 10.3v9.3c0 .6.5 1.1 1.1 1.1H9v-6h6v6h4.9c.6 0 1.1-.5 1.1-1.1v-9.3L12 3.2z"/></svg>Home</button>
+  <button class="tab" data-tab="savings" onclick="switchTab('savings')">
+    <svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 100 20 10 10 0 000-20zm0 3a7 7 0 110 14 7 7 0 010-14zm0 3a4 4 0 100 8 4 4 0 000-8zm0 2.6a1.4 1.4 0 110 2.8 1.4 1.4 0 010-2.8z"/></svg>Savings</button>
+  <button class="tab" data-tab="weeks" onclick="switchTab('weeks')">
+    <svg viewBox="0 0 24 24"><path d="M7 2v2H5.5A2.5 2.5 0 003 6.5v12A2.5 2.5 0 005.5 21h13a2.5 2.5 0 002.5-2.5v-12A2.5 2.5 0 0018.5 4H17V2h-2v2H9V2H7zm11.5 6v10.5a.5.5 0 01-.5.5H6a.5.5 0 01-.5-.5V8h13z"/></svg>Weeks</button>
+  <button class="tab" data-tab="projection" onclick="switchTab('projection')">
+    <svg viewBox="0 0 24 24"><path d="M4 3a1 1 0 00-1 1v15a2 2 0 002 2h15a1 1 0 100-2H5V4a1 1 0 00-1-1zm4 11a1 1 0 00-1 1v2a1 1 0 102 0v-2a1 1 0 00-1-1zm4-5a1 1 0 00-1 1v7a1 1 0 102 0v-7a1 1 0 00-1-1zm4-3a1 1 0 00-1 1v10a1 1 0 102 0V8a1 1 0 00-1-1z"/></svg>Plan</button>
+  <button class="tab" data-tab="settings" onclick="switchTab('settings')">
+    <svg viewBox="0 0 24 24"><path d="M12 8.5a3.5 3.5 0 100 7 3.5 3.5 0 000-7zm0 2a1.5 1.5 0 110 3 1.5 1.5 0 010-3zm-1-8.5-.4 2.3a7.7 7.7 0 00-1.6.9L6.8 4.3 4.3 6.8l1 2.1a7.7 7.7 0 00-.9 1.6L2 11v2l2.3.4c.2.6.5 1.1.9 1.6l-1 2.1 2.5 2.5 2.1-1c.5.4 1 .7 1.6.9L11 22h2l.4-2.3c.6-.2 1.1-.5 1.6-.9l2.1 1 2.5-2.5-1-2.1c.4-.5.7-1 .9-1.6L22 13v-2l-2.3-.4a7.7 7.7 0 00-.9-1.6l1-2.1-2.5-2.5-2.1 1a7.7 7.7 0 00-1.6-.9L13 2h-2z"/></svg>More</button>
 </div>
 
 <div id="dashboard" class="panel active"></div>
@@ -200,7 +238,7 @@ const SAVINGS_ACCOUNTS = [
 ];
 
 const START = new Date(2026, 5, 25);
-const SKIP_DATES = ['2026-12-24', '2026-12-31'];
+const SKIP_DATES = ['2026-12-31', '2027-01-07'];
 
 function getThursdays() {
   const dates = [];
@@ -249,12 +287,9 @@ if (!state.skips) state.skips = {};
 if (!state.done) state.done = {};
 if (!state.billMeta) state.billMeta = {};
 
-// One-time migration: earlier versions accidentally saved flexible-bill pauses
-// (roth/brokerage/extra103) across many months. Clear all of them except the
-// intended December 2026 winter-break pause, so bills aren't stuck greyed-out.
 if (!state.migratedFlexPause) {
   Object.keys(state.toggles || {}).forEach(mk => {
-    if (mk === '2026-11') return; // keep December pause
+    if (mk === '2026-11') return;
     ['roth', 'brokerage', 'extra103'].forEach(bid => {
       if (state.toggles[mk] && state.toggles[mk][bid] === false) {
         state.toggles[mk][bid] = true;
@@ -326,8 +361,6 @@ function effectiveTransfer(d) {
   FLEX_BILLS.forEach(billId => {
     const monthPaused = tog[billId] === false;
     const weekSkipped = skipped.includes(billId);
-    // Subtract this week's slice if the bill is skipped this week OR paused for the whole month.
-    // Guard against double-subtracting when both are set.
     if (monthPaused || weekSkipped) t -= weekSlice(y, m, billId);
   });
   return Math.max(0, t);
@@ -363,8 +396,6 @@ function simulate() {
     const [y, m] = mk.split('-').map(Number);
     getMonthBills(y, m).forEach(b => {
       const dueDate = new Date(y, m, b.day);
-      // If this bill is checked off (paid) and its due date is still in the future,
-      // treat it as posting today so the live balance reflects the early payment.
       const ek = `${fmtKey(dueDate)}|${b.id}`;
       let postDate = dueDate;
       let paidEarly = false;
@@ -421,7 +452,6 @@ function renderDashboard() {
     if (e.date <= now) { liveBalance = e.balance; lastEvent = e; }
     else if (!nextEvent) { nextEvent = e; }
   }
-  const liveClass = liveBalance < 0 ? 'red' : liveBalance < 50 ? 'amber' : 'green';
   const mn = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   let nextLabel = '';
   if (nextEvent) {
@@ -447,31 +477,30 @@ function renderDashboard() {
       const pct = Math.min(100, total / a.goal * 100);
       savHtml += `<div class="card"><div style="padding:14px 16px">
         <div style="display:flex;justify-content:space-between;align-items:baseline">
-          <span style="font-size:13px;font-weight:600">${a.name}</span>
-          <span style="font-size:16px;font-weight:700;color:var(--green)">${money(total)}</span>
+          <span style="font-size:15px;font-weight:600">${a.name}</span>
+          <span style="font-size:17px;font-weight:700;color:var(--green)">${money(total)}</span>
         </div>
-        <div style="font-size:11px;color:var(--muted);margin-top:2px">of ${money(a.goal)} · ${Math.round(pct)}%</div>
+        <div style="font-size:12px;color:var(--muted);margin-top:3px">of ${money(a.goal)} · ${Math.round(pct)}%</div>
         <div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div>
       </div></div>`;
     } else {
       savHtml += `<div class="card"><div style="padding:14px 16px">
         <div style="display:flex;justify-content:space-between;align-items:baseline">
-          <span style="font-size:13px;font-weight:600">${a.name}</span>
-          <span style="font-size:16px;font-weight:700;color:var(--green)">${money(total)}</span>
+          <span style="font-size:15px;font-weight:600">${a.name}</span>
+          <span style="font-size:17px;font-weight:700;color:var(--green)">${money(total)}</span>
         </div>
-        <div style="font-size:11px;color:var(--muted);margin-top:2px">Open-ended goal</div>
+        <div style="font-size:12px;color:var(--muted);margin-top:3px">Open-ended goal</div>
       </div></div>`;
     }
   });
 
+  const heroClass = liveBalance < 0 ? 'bad' : liveBalance < 50 ? 'warn' : 'ok';
   el.innerHTML = `
-    <div class="card" style="background:var(--ink);border:none;margin-bottom:16px">
-      <div style="padding:18px 18px 16px">
-        <div style="font-size:11px;color:rgba(255,255,255,0.5);text-transform:uppercase;letter-spacing:0.6px">Expense Account · As of Today</div>
-        <div style="font-size:38px;font-weight:700;letter-spacing:-1px;color:${liveBalance < 0 ? '#ff8a9b' : liveBalance < 50 ? '#fbbf6b' : '#7fd1a8'};margin:2px 0">${money(liveBalance)}</div>
-        <div style="font-size:12px;color:rgba(255,255,255,0.6)">${lastLabel}</div>
-        <div style="font-size:12px;color:rgba(255,255,255,0.45);margin-top:2px">${nextLabel}</div>
-      </div>
+    <div class="hero ${heroClass}">
+      <div class="hero-lbl">Expense Account · As of Today</div>
+      <div class="hero-val">${money(liveBalance)}</div>
+      <div class="hero-sub">${lastLabel}</div>
+      <div class="hero-sub2">${nextLabel}</div>
     </div>
     <div class="metric-row">
       <div class="metric-card"><div class="mc-val">${money(currentTransfer)}</div><div class="mc-lbl">This Week's Transfer</div></div>
@@ -484,7 +513,7 @@ function renderDashboard() {
     ${alerts}
     <div class="section-title">Savings Tracker (Actual)</div>
     ${savHtml}
-    <p style="font-size:12px;color:var(--muted);margin-top:4px">Log real contributions on the Savings tab. These start at $0 and only count what you've actually deposited.</p>
+    <p style="font-size:13px;color:var(--muted);margin-top:4px;padding:0 6px">Log real contributions on the Savings tab. These start at $0 and only count what you've actually deposited.</p>
   `;
 }
 
@@ -577,7 +606,10 @@ function renderWeeks() {
   const thursdays = getThursdays();
   const cwi = findCurrentWeek();
   const mn = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-  let html = '<div class="section-title">Weekly Transfers</div><p style="font-size:12px;color:var(--muted);margin-bottom:12px">Tap a week to skip a flexible bill\'s slice that week — keeps that cash in checking and trims the month\'s bill. The bill still pays on its due date, just one slice short.</p>';
+  let html = '<div class="section-title">Weekly Transfers</div><p style="font-size:13px;color:var(--muted);margin-bottom:12px;padding:0 6px">Tap a week to skip a flexible bill\'s slice that week — keeps that cash in checking and trims the month\'s bill. The bill still pays on its due date, just one slice short.</p>';
+
+  let pastHtml = '';
+  let pastCount = 0;
 
   thursdays.forEach((d, i) => {
     const key = fmtKey(d);
@@ -586,31 +618,34 @@ function renderWeeks() {
     const baseT = state.transfers[key] ?? 838;
     const effT = effectiveTransfer(d);
     const isCurrent = i === cwi;
+    const isPast = i < cwi;
     const label = `${mn[m]} ${d.getDate()}`;
     const skipsThisWeek = state.skips[key] || [];
     const isOpen = openWeeks.has(key);
+    let cardHtml = '';
 
     if (skip) {
-      html += `<div class="card"><div class="card-header" style="cursor:default"><span class="card-title">${label}</span><span class="badge badge-red">No Pay</span></div></div>`;
+      cardHtml = `<div class="card"><div class="card-header" style="cursor:default"><span class="card-title">${label}</span><span class="badge badge-red">No Pay</span></div></div>`;
+      if (isPast) { pastHtml += cardHtml; pastCount++; } else { html += cardHtml; }
       return;
     }
 
     const headerBg = isCurrent ? 'background:var(--green-bg)' : '';
-    html += `<div class="card"><div class="card-header" style="${headerBg}" onclick="toggleWeek('${key}', this)">
+    cardHtml += `<div class="card"><div class="card-header" style="${headerBg}" onclick="toggleWeek('${key}', this)">
       <span class="card-title">${label}${isCurrent ? ' ←' : ''}</span>
       <span style="text-align:right">
-        <span style="font-size:14px;font-weight:700">${money(effT)}</span>
-        ${effT !== baseT ? `<span style="font-size:11px;color:var(--amber);display:block">was ${money(baseT)}</span>` : ''}
+        <span style="font-size:16px;font-weight:700">${money(effT)}</span>
+        ${effT !== baseT ? `<span style="font-size:12px;color:var(--amber);display:block">was ${money(baseT)}</span>` : ''}
       </span>
     </div><div class="card-body" style="display:${isOpen ? 'block' : 'none'}">
-      <div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border)">
-        <span style="font-size:13px;flex:1">Full transfer this week</span>
-        <span style="font-size:12px;color:var(--muted)">$</span>
-        <input class="week-input" type="number" value="${baseT}" data-key="${key}" onchange="updateTransfer(this)" min="0" max="1038" style="width:80px">
+      <div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:0.5px solid var(--hairline)">
+        <span style="font-size:15px;flex:1">Full transfer this week</span>
+        <span style="font-size:14px;color:var(--muted)">$</span>
+        <input class="week-input" type="number" value="${baseT}" data-key="${key}" onchange="updateTransfer(this)" min="0" max="1038" style="width:82px">
       </div>`;
 
     if (paychecksInMonth(y, m) >= 2) {
-      html += `<div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;padding:10px 0 4px">Skip a flexible bill this week</div>`;
+      cardHtml += `<div style="font-size:12px;color:var(--muted);padding:12px 0 4px">Skip a flexible bill this week</div>`;
       FLEX_BILLS.forEach(bid => {
         const bill = billsForMonth(y, m).find(b => b.id === bid);
         if (!bill) return;
@@ -618,26 +653,36 @@ function renderWeeks() {
         const monthPaused = (state.toggles[`${y}-${m}`] || {})[bid] === false;
         const isSkipped = skipsThisWeek.includes(bid);
         if (monthPaused) {
-          html += `<div class="toggle-row" style="opacity:0.7">
+          cardHtml += `<div class="toggle-row" style="opacity:0.7">
             <span class="toggle-label" style="flex:1">${bill.name}</span>
-            <span style="font-size:12px;color:var(--amber);margin-right:10px">paused all month · ${money(slice)}/wk</span>
+            <span style="font-size:13px;color:var(--amber);margin-right:10px">paused all month · ${money(slice)}/wk</span>
             <button class="toggle on" disabled style="opacity:0.55;cursor:default"></button>
           </div>`;
           return;
         }
-        html += `<div class="toggle-row">
+        cardHtml += `<div class="toggle-row">
           <span class="toggle-label" style="flex:1">${bill.name}</span>
-          <span style="font-size:12px;color:var(--muted);margin-right:10px">${isSkipped ? 'skipping ' : ''}${money(slice)}/wk</span>
+          <span style="font-size:13px;color:var(--muted);margin-right:10px">${isSkipped ? 'skipping ' : ''}${money(slice)}/wk</span>
           <button class="toggle ${isSkipped ? 'on' : ''}" data-key="${key}" data-bill="${bid}" onclick="toggleSkip(this)"></button>
         </div>`;
       });
-      html += `<div style="font-size:12px;color:var(--green);font-weight:600;padding-top:10px">Keep $${Math.round(1038 - effT)} in checking this week</div>`;
+      cardHtml += `<div style="font-size:13px;color:var(--green);font-weight:600;padding-top:10px">Keep $${Math.round(1038 - effT)} in checking this week</div>`;
     } else {
-      html += `<div style="font-size:12px;color:var(--muted);padding:10px 0 2px">Seed week — funds the start of next month. No flexible-bill skips here.</div>`;
+      cardHtml += `<div style="font-size:13px;color:var(--muted);padding:10px 0 2px">Seed week — funds the start of next month. No flexible-bill skips here.</div>`;
     }
 
-    html += `</div></div>`;
+    cardHtml += `</div></div>`;
+    if (isPast) { pastHtml += cardHtml; pastCount++; } else { html += cardHtml; }
   });
+
+  if (pastCount > 0) {
+    const open = openWeeks.has('__past__');
+    const folder = `<div class="card"><div class="card-header" onclick="toggleWeek('__past__', this)">
+      <span class="card-title" style="color:var(--muted)">Previous Weeks</span>
+      <span class="tl-head-right"><span style="font-size:13px;color:var(--muted)">${pastCount}</span><span class="tl-chev">${open ? '▾' : '▸'}</span></span>
+    </div><div class="card-body" style="display:${open ? 'block' : 'none'};padding:0 0 4px">${pastHtml}</div></div>`;
+    html = html.replace('</p>', '</p>' + folder);
+  }
 
   el.innerHTML = html;
 }
@@ -646,7 +691,10 @@ function toggleWeek(key, headerEl) {
   if (openWeeks.has(key)) openWeeks.delete(key);
   else openWeeks.add(key);
   const body = headerEl.nextElementSibling;
-  body.style.display = openWeeks.has(key) ? 'block' : 'none';
+  const open = openWeeks.has(key);
+  body.style.display = open ? 'block' : 'none';
+  const chev = headerEl.querySelector('.tl-chev');
+  if (chev) chev.textContent = open ? '▾' : '▸';
 }
 
 function toggleSkip(btn) {
@@ -668,7 +716,6 @@ function renderProjection() {
   const sim = simulate();
   const mn = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
-  // Group events by month (bills group by their due month, even if paid early)
   const byMonth = {};
   sim.events.forEach(e => {
     const groupDate = e.type === 'bill' ? e.dueDate : e.date;
@@ -679,14 +726,12 @@ function renderProjection() {
 
   const now = new Date();
   const curMk = `${now.getFullYear()}-${now.getMonth()}`;
-  // First render defaults to the current month open; after that we track the user's expansions.
   if (openPlanMonths === null) { openPlanMonths = new Set([curMk]); }
   let html = '<div class="section-title">Expense Account Timeline</div>';
 
   Object.keys(byMonth).forEach(mk => {
     const [y, m] = mk.split('-').map(Number);
     const events = byMonth[mk];
-    // Closing balance = balance after the latest-posting event in this month group
     const closeBal = events.reduce((acc, e) => (e.date >= acc.date ? e : acc), events[0]).balance;
     const closeColor = closeBal < 0 ? 'var(--red)' : closeBal < 50 ? 'var(--amber)' : 'var(--green)';
     const isOpen = openPlanMonths.has(mk);
@@ -720,7 +765,6 @@ function renderProjection() {
         return;
       }
 
-      // Detect skip-reduced lines
       let paused = '';
       if (e.type === 'paycheck') {
         const baseT = state.transfers[e.key] ?? 838;
@@ -758,8 +802,6 @@ function toggleDone(ek, btn) {
   if (state.done[ek]) delete state.done[ek];
   else state.done[ek] = true;
   saveState();
-  // A checked-off bill whose due date is still in the future posts today,
-  // so re-render the dashboard and timeline to reflect the shifted balance.
   renderDashboard();
   renderProjection();
 }
@@ -770,20 +812,20 @@ function renderSettings() {
   const months = [];
   for (let m = 6; m <= 11; m++) months.push({ y: 2026, m });
   for (let m = 0; m <= 1; m++) months.push({ y: 2027, m });
-  let html = '<div class="section-title">Starting Balance</div><p style="font-size:12px;color:var(--muted);margin-bottom:12px">What\'s actually in your expense account, and the date that reflects. The projection builds forward from here. Events before this date are excluded (already paid).</p>';
+  let html = '<div class="section-title">Starting Balance</div><p style="font-size:13px;color:var(--muted);margin-bottom:12px;padding:0 6px">What\'s actually in your expense account, and the date that reflects. The projection builds forward from here. Events before this date are excluded (already paid).</p>';
   html += `<div class="card"><div style="padding:14px 16px">
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
-      <span style="font-size:13px;font-weight:600;flex:1">Balance today</span>
-      <span style="font-size:14px;color:var(--muted)">$</span>
+      <span style="font-size:15px;font-weight:600;flex:1">Balance today</span>
+      <span style="font-size:15px;color:var(--muted)">$</span>
       <input class="week-input" type="number" id="startBal" value="${state.startBalance ?? 274}" onchange="updateStart()" style="width:100px">
     </div>
     <div style="display:flex;align-items:center;gap:10px">
-      <span style="font-size:13px;font-weight:600;flex:1">As of date</span>
+      <span style="font-size:15px;font-weight:600;flex:1">As of date</span>
       <input class="add-input" type="date" id="startDate" value="${state.startDate || '2026-06-29'}" onchange="updateStart()" style="flex:0 0 auto;width:auto">
     </div>
   </div></div>`;
 
-  html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:16px 0 8px"><span class="section-title" style="padding:0">Monthly Bills</span><button class="btn-add" onclick="addCustomBill()">+ Bill</button></div><p style="font-size:12px;color:var(--muted);margin-bottom:12px">Toggle bills on/off and set custom amounts per month. Bills are ordered by due date. Pausing a flexible bill (Extra, Roth, Brokerage) also frees its weekly cash to checking. Tap Edit under any default bill to rename it or change its due date. Paused bills show red-lined in the Plan timeline. Custom bills can be recurring or one-off.</p>';
+  html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:18px 6px 7px"><span class="section-title" style="padding:0">Monthly Bills</span><button class="btn-add" onclick="addCustomBill()">+ Bill</button></div><p style="font-size:13px;color:var(--muted);margin-bottom:12px;padding:0 6px">Toggle bills on/off and set custom amounts per month. Bills are ordered by due date. Pausing a flexible bill (Extra, Roth, Brokerage) also frees its weekly cash to checking. Tap Edit under any default bill to rename it or change its due date. Paused bills show red-lined in the Plan timeline. Custom bills can be recurring or one-off.</p>';
   months.forEach(({ y, m }) => {
     const mk = `${y}-${m}`;
     if (!state.toggles[mk]) { state.toggles[mk] = {}; }
@@ -791,27 +833,27 @@ function renderSettings() {
     let monthTotal = 0;
     monthBills.forEach(b => { if ((state.toggles[mk][b.id]) !== false) monthTotal += billAmount(y, m, b.id); });
     const isOpen = openMonths.has(mk);
-    html += `<div class="card"><div class="card-header" onclick="toggleMonthCard('${mk}', this)"><span class="card-title">${mn[m]} ${y}</span><span style="font-size:13px;font-weight:700;color:var(--green)">${money(monthTotal)}/mo</span></div><div class="card-body" style="display:${isOpen ? 'block' : 'none'}">`;
+    html += `<div class="card"><div class="card-header" onclick="toggleMonthCard('${mk}', this)"><span class="card-title">${mn[m]} ${y}</span><span style="font-size:15px;font-weight:700;color:var(--green)">${money(monthTotal)}/mo</span></div><div class="card-body" style="display:${isOpen ? 'block' : 'none'}">`;
     html += `<div class="month-total"><span>Total active bills</span><span style="color:var(--green)">${money(monthTotal)}</span></div>`;
     monthBills.forEach(b => {
       const on = state.toggles[mk][b.id] !== false;
       const amt = billAmount(y, m, b.id);
       const isCustom = state.amounts[mk] && state.amounts[mk][b.id] !== undefined;
       const isDefault = !b.recurring && !b.month;
-      const tag = b.recurring ? ' <span style="font-size:9px;color:var(--blue)">RECURRING</span>' : (b.month ? ' <span style="font-size:9px;color:var(--amber)">ONE-OFF</span>' : '');
-      const delBtn = (b.recurring || b.month) ? ` <button class="del-btn" style="font-size:14px" onclick="delCustomBill('${b.id}')">×</button>` : '';
+      const tag = b.recurring ? ' <span style="font-size:10px;color:var(--blue)">RECURRING</span>' : (b.month ? ' <span style="font-size:10px;color:var(--amber)">ONE-OFF</span>' : '');
+      const delBtn = (b.recurring || b.month) ? ` <button class="del-btn" style="font-size:16px" onclick="delCustomBill('${b.id}')">×</button>` : '';
       const metaEdited = isDefault && state.billMeta[b.id] && (state.billMeta[b.id].name !== undefined || state.billMeta[b.id].day !== undefined);
       const ord = (n) => { const s = ['th','st','nd','rd'], v = n % 100; return n + (s[(v-20)%10] || s[v] || s[0]); };
       const sub = isDefault
-        ? `<div style="font-size:11px;color:var(--muted);margin-top:1px">Due the ${ord(b.day)}${metaEdited ? ' <span style="color:var(--amber)">· edited</span>' : ''} <button onclick="editBill('${b.id}')" style="background:none;border:none;color:var(--blue);font-size:11px;font-weight:600;cursor:pointer;padding:0 0 0 4px;font-family:inherit">Edit</button></div>`
+        ? `<div style="font-size:12px;color:var(--muted);margin-top:2px">Due the ${ord(b.day)}${metaEdited ? ' <span style="color:var(--amber)">· edited</span>' : ''} <button onclick="editBill('${b.id}')" style="background:none;border:none;color:var(--blue);font-size:12px;font-weight:500;cursor:pointer;padding:0 0 0 4px;font-family:inherit">Edit</button></div>`
         : '';
       html += `<div class="toggle-row">
         <span style="flex:1">
-          <span class="toggle-label">${b.name}${tag}${isCustom ? ' <span style="font-size:10px;color:var(--amber)">●</span>' : ''}${delBtn}</span>
+          <span class="toggle-label">${b.name}${tag}${isCustom ? ' <span style="font-size:11px;color:var(--amber)">●</span>' : ''}${delBtn}</span>
           ${sub}
         </span>
-        <span style="font-size:12px;color:var(--muted);margin-right:6px">$</span>
-        <input class="week-input" type="number" value="${amt}" data-month="${mk}" data-bill="${b.id}" onchange="updateBillAmount(this)" style="width:70px;margin-right:10px">
+        <span style="font-size:14px;color:var(--muted);margin-right:6px">$</span>
+        <input class="week-input" type="number" value="${amt}" data-month="${mk}" data-bill="${b.id}" onchange="updateBillAmount(this)" style="width:72px;margin-right:10px">
         <button class="toggle ${on ? 'on' : ''}" data-month="${mk}" data-bill="${b.id}" onclick="toggleBill(this)"></button>
       </div>`;
     });
