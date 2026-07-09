@@ -40,7 +40,7 @@
       line-height: 1.4;
       max-width: 520px;
       margin: 0 auto;
-      padding: 0 0 calc(78px + env(safe-area-inset-bottom, 0px)) 0;
+      padding: 0 0 calc(84px + env(safe-area-inset-bottom, 0px)) 0;
       min-height: 100vh;
       -webkit-font-smoothing: antialiased;
       letter-spacing: -0.01em;
@@ -66,7 +66,7 @@
       position: fixed; bottom: 0; left: 0; right: 0; z-index: 99;
       margin: 0 auto;
       max-width: 520px;
-      padding: 6px max(env(safe-area-inset-left, 0px), 6px) calc(env(safe-area-inset-bottom, 0px) + 4px) max(env(safe-area-inset-right, 0px), 6px);
+      padding: 8px max(env(safe-area-inset-left, 0px), 6px) max(env(safe-area-inset-bottom, 0px), 14px) max(env(safe-area-inset-right, 0px), 6px);
     }
     .tab {
       flex: 1; padding: 4px 2px; text-align: center;
@@ -288,6 +288,7 @@ if (!state.customBills) state.customBills = [];
 if (!state.skips) state.skips = {};
 if (!state.done) state.done = {};
 if (!state.billMeta) state.billMeta = {};
+if (!state.pauseMode) state.pauseMode = {};
 
 if (!state.migratedFlexPause) {
   Object.keys(state.toggles || {}).forEach(mk => {
@@ -363,7 +364,14 @@ function effectiveTransfer(d) {
   FLEX_BILLS.forEach(billId => {
     const monthPaused = tog[billId] === false;
     const weekSkipped = skipped.includes(billId);
-    if (monthPaused || weekSkipped) t -= weekSlice(y, m, billId);
+    // A one-off weekly skip always keeps its slice in checking.
+    if (weekSkipped) { t -= weekSlice(y, m, billId); return; }
+    // A full-month pause keeps cash in checking ONLY when its mode is 'checking' (default).
+    // In 'expense' mode transfers stay full, so the freed cash pools in the expense account.
+    if (monthPaused) {
+      const mode = (state.pauseMode[mk] && state.pauseMode[mk][billId]) || 'checking';
+      if (mode === 'checking') t -= weekSlice(y, m, billId);
+    }
   });
   return Math.max(0, t);
 }
@@ -655,9 +663,11 @@ function renderWeeks() {
         const monthPaused = (state.toggles[`${y}-${m}`] || {})[bid] === false;
         const isSkipped = skipsThisWeek.includes(bid);
         if (monthPaused) {
+          const mode = (state.pauseMode[`${y}-${m}`] && state.pauseMode[`${y}-${m}`][bid]) || 'checking';
+          const note = mode === 'checking' ? `paused · ${money(slice)}/wk to checking` : 'paused · stays in expense acct';
           cardHtml += `<div class="toggle-row" style="opacity:0.7">
             <span class="toggle-label" style="flex:1">${bill.name}</span>
-            <span style="font-size:13px;color:var(--amber);margin-right:10px">paused all month · ${money(slice)}/wk</span>
+            <span style="font-size:13px;color:var(--amber);margin-right:10px">${note}</span>
             <button class="toggle on" disabled style="opacity:0.55;cursor:default"></button>
           </div>`;
           return;
@@ -827,7 +837,7 @@ function renderSettings() {
     </div>
   </div></div>`;
 
-  html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:18px 6px 7px"><span class="section-title" style="padding:0">Monthly Bills</span><button class="btn-add" onclick="addCustomBill()">+ Bill</button></div><p style="font-size:13px;color:var(--muted);margin-bottom:12px;padding:0 6px">Toggle bills on/off and set custom amounts per month. Bills are ordered by due date. Pausing a flexible bill (Extra, Roth, Brokerage) also frees its weekly cash to checking. Tap Edit under any default bill to rename it or change its due date. Paused bills show red-lined in the Plan timeline. Custom bills can be recurring or one-off.</p>';
+  html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:18px 6px 7px"><span class="section-title" style="padding:0">Monthly Bills</span><button class="btn-add" onclick="addCustomBill()">+ Bill</button></div><p style="font-size:13px;color:var(--muted);margin-bottom:12px;padding:0 6px">Toggle bills on/off and set custom amounts per month. Bills are ordered by due date. Pausing a flexible bill lets you send the freed cash to checking or leave it in the expense account. Tap Edit under any default bill to rename it or change its due date. Paused bills show red-lined in the Plan timeline. Custom bills can be recurring or one-off.</p>';
   months.forEach(({ y, m }) => {
     const mk = `${y}-${m}`;
     if (!state.toggles[mk]) { state.toggles[mk] = {}; }
@@ -849,10 +859,20 @@ function renderSettings() {
       const sub = isDefault
         ? `<div style="font-size:12px;color:var(--muted);margin-top:2px">Due the ${ord(b.day)}${metaEdited ? ' <span style="color:var(--amber)">· edited</span>' : ''} <button onclick="editBill('${b.id}')" style="background:none;border:none;color:var(--blue);font-size:12px;font-weight:500;cursor:pointer;padding:0 0 0 4px;font-family:inherit">Edit</button></div>`
         : '';
+      let freed = '';
+      if (!on && FLEX_BILLS.includes(b.id)) {
+        const mode = (state.pauseMode[mk] && state.pauseMode[mk][b.id]) || 'checking';
+        const pill = (val, lbl) => `<button onclick="setPauseMode('${mk}','${b.id}','${val}')" style="font-size:11px;font-weight:600;font-family:inherit;cursor:pointer;border:none;border-radius:99px;padding:3px 10px;margin-right:6px;${mode===val?'background:var(--blue);color:#fff':'background:var(--card2);color:var(--muted)'}">${lbl}</button>`;
+        freed = `<div style="margin-top:6px">
+          <div style="font-size:11px;color:var(--muted);margin-bottom:4px">Freed cash goes to</div>
+          ${pill('checking','Checking')}${pill('expense','Expense acct')}
+        </div>`;
+      }
       html += `<div class="toggle-row">
         <span style="flex:1">
           <span class="toggle-label">${b.name}${tag}${isCustom ? ' <span style="font-size:11px;color:var(--amber)">●</span>' : ''}${delBtn}</span>
           ${sub}
+          ${freed}
         </span>
         <span style="font-size:14px;color:var(--muted);margin-right:6px">$</span>
         <input class="week-input" type="number" value="${amt}" data-month="${mk}" data-bill="${b.id}" onchange="updateBillAmount(this)" style="width:72px;margin-right:10px">
@@ -862,7 +882,7 @@ function renderSettings() {
     html += '</div></div>';
   });
   html += `<div class="section-title" style="margin-top:20px">Data</div>
-    <button class="reset-btn" onclick="if(confirm('Reset transfers, toggles, custom amounts, custom bills, bill name/date edits, and weekly skips? Your savings goals and logged contributions will be kept.')){state.transfers={...defaults};state.toggles=JSON.parse(JSON.stringify(defaultToggles));state.amounts={};state.customBills=[];state.skips={};state.billMeta={};saveState();renderDashboard();renderProjection();renderSettings();alert('Reset done.');}">Reset Plan to Defaults</button>
+    <button class="reset-btn" onclick="if(confirm('Reset transfers, toggles, custom amounts, custom bills, bill name/date edits, pause settings, and weekly skips? Your savings goals and logged contributions will be kept.')){state.transfers={...defaults};state.toggles=JSON.parse(JSON.stringify(defaultToggles));state.amounts={};state.customBills=[];state.skips={};state.billMeta={};state.pauseMode={};saveState();renderDashboard();renderProjection();renderSettings();alert('Reset done.');}">Reset Plan to Defaults</button>
     <button class="reset-btn" onclick="if(confirm('Delete ALL logged savings contributions? This cannot be undone.')){state.contributions=[];saveState();renderDashboard();renderSavings();alert('Contributions cleared.');}">Clear All Contributions</button>`;
   el.innerHTML = html;
 }
@@ -900,6 +920,16 @@ function toggleMonthCard(mk, headerEl) {
   else openMonths.add(mk);
   const body = headerEl.nextElementSibling;
   body.style.display = openMonths.has(mk) ? 'block' : 'none';
+}
+function setPauseMode(mk, bid, mode) {
+  if (!state.pauseMode[mk]) state.pauseMode[mk] = {};
+  state.pauseMode[mk][bid] = mode;
+  openMonths.add(mk);
+  saveState();
+  renderDashboard();
+  renderProjection();
+  renderWeeks();
+  renderSettings();
 }
 function editBill(billId) {
   const base = BILLS.find(b => b.id === billId);
