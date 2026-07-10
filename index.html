@@ -289,6 +289,7 @@ if (!state.skips) state.skips = {};
 if (!state.done) state.done = {};
 if (!state.billMeta) state.billMeta = {};
 if (!state.pauseMode) state.pauseMode = {};
+if (!state.pausedWeeks) state.pausedWeeks = {};
 
 if (!state.migratedFlexPause) {
   Object.keys(state.toggles || {}).forEach(mk => {
@@ -324,7 +325,7 @@ function billsForMonth(year, month) {
 }
 
 function paychecksInMonth(year, month) {
-  return getThursdays().filter(d => d.getFullYear() === year && d.getMonth() === month && ! SKIP_DATES.includes(fmtKey(d))).length;
+  return getThursdays().filter(d => d.getFullYear() === year && d.getMonth() === month && !SKIP_DATES.includes(fmtKey(d))).length;
 }
 
 function baseBillAmount(year, month, billId) {
@@ -356,6 +357,7 @@ function billAmount(year, month, billId) {
 
 function effectiveTransfer(d) {
   const k = fmtKey(d);
+  if (state.pausedWeeks[k]) return 0;
   let t = state.transfers[k] ?? 838;
   const y = d.getFullYear(), m = d.getMonth();
   const mk = `${y}-${m}`;
@@ -475,7 +477,7 @@ function renderDashboard() {
 
   let alerts = '';
   if (minBal < 0) alerts = `<div class="alert-card danger"><div class="alert-title">Account Goes Negative</div>Expense account hits ${money(minBal)} on ${fmt(minDate)}. Adjust transfers or pause a bill.</div>`;
-  else alerts = `<div class="alert-card ok"><div class="alert-title">All Clear</div>Expense account stays at or above $0 through Feb 2027 (low point ${money(minBal)} on ${fmt(minDate)}).</div>`;
+  else alerts = `<div class="alert-card ok"><div class="alert-title">All Clear</div>Expense account stays at or above $0 through Feb 2027.</div>`;
 
   let savHtml = '';
   allSavingsAccounts().forEach(a => {
@@ -613,7 +615,7 @@ function renderWeeks() {
   const thursdays = getThursdays();
   const cwi = findCurrentWeek();
   const mn = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-  let html = '<div class="section-title">Weekly Transfers</div><p style="font-size:13px;color:var(--muted);margin-bottom:12px;padding:0 6px">Tap a week to skip a flexible bill\'s slice that week — keeps that cash in checking and trims the month\'s bill. The bill still pays on its due date, just one slice short.</p>';
+  let html = '<div class="section-title">Weekly Transfers</div><p style="font-size:13px;color:var(--muted);margin-bottom:12px;padding:0 6px">Tap a week to pause the whole paycheck, edit its transfer, or skip a flexible bill\'s slice that week. Changes update the projection live.</p>';
 
   let pastHtml = '';
   let pastCount = 0;
@@ -638,20 +640,29 @@ function renderWeeks() {
     }
 
     const headerBg = isCurrent ? 'background:var(--green-bg)' : '';
+    const isPausedWk = !!state.pausedWeeks[key];
     cardHtml += `<div class="card"><div class="card-header" style="${headerBg}" onclick="toggleWeek('${key}', this)">
-      <span class="card-title">${label}${isCurrent ? ' ←' : ''}</span>
+      <span class="card-title">${label}${isCurrent ? ' ←' : ''}${isPausedWk ? ' <span class="badge badge-red" style="margin-left:6px">Paused</span>' : ''}</span>
       <span style="text-align:right">
-        <span style="font-size:16px;font-weight:700">${money(effT)}</span>
-        ${effT !== baseT ? `<span style="font-size:12px;color:var(--amber);display:block">was ${money(baseT)}</span>` : ''}
+        <span style="font-size:16px;font-weight:700;${isPausedWk ? 'color:var(--red)' : ''}">${money(effT)}</span>
+        ${(!isPausedWk && effT !== baseT) ? `<span style="font-size:12px;color:var(--amber);display:block">was ${money(baseT)}</span>` : ''}
       </span>
     </div><div class="card-body" style="display:${isOpen ? 'block' : 'none'}">
-      <div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:0.5px solid var(--hairline)">
+      <div class="toggle-row">
+        <span class="toggle-label" style="flex:1">Pause this paycheck</span>
+        <span style="font-size:13px;color:var(--muted);margin-right:10px">${isPausedWk ? 'no transfer' : ''}</span>
+        <button class="toggle ${isPausedWk ? 'on' : ''}" onclick="toggleWeekPause('${key}')"></button>
+      </div>`;
+
+    if (!isPausedWk) {
+      cardHtml += `<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:0.5px solid var(--hairline)">
         <span style="font-size:15px;flex:1">Full transfer this week</span>
         <span style="font-size:14px;color:var(--muted)">$</span>
         <input class="week-input" type="number" value="${baseT}" data-key="${key}" onchange="updateTransfer(this)" min="0" max="1038" style="width:82px">
       </div>`;
+    }
 
-    if (paychecksInMonth(y, m) >= 2) {
+    if (!isPausedWk && paychecksInMonth(y, m) >= 2) {
       cardHtml += `<div style="font-size:12px;color:var(--muted);padding:12px 0 4px">Skip a flexible bill this week</div>`;
       FLEX_BILLS.forEach(bid => {
         const bill = billsForMonth(y, m).find(b => b.id === bid);
@@ -676,7 +687,7 @@ function renderWeeks() {
         </div>`;
       });
       cardHtml += `<div style="font-size:13px;color:var(--green);font-weight:600;padding-top:10px">Keep $${Math.round(1038 - effT)} in checking this week</div>`;
-    } else {
+    } else if (!isPausedWk) {
       cardHtml += `<div style="font-size:13px;color:var(--muted);padding:10px 0 2px">Seed week — funds the start of next month. No flexible-bill skips here.</div>`;
     }
 
@@ -704,6 +715,16 @@ function toggleWeek(key, headerEl) {
   body.style.display = open ? 'block' : 'none';
   const chev = headerEl.querySelector('.tl-chev');
   if (chev) chev.textContent = open ? '▾' : '▸';
+}
+
+function toggleWeekPause(key) {
+  if (state.pausedWeeks[key]) delete state.pausedWeeks[key];
+  else state.pausedWeeks[key] = true;
+  openWeeks.add(key);
+  saveState();
+  renderWeeks();
+  renderDashboard();
+  renderProjection();
 }
 
 function toggleSkip(btn) {
@@ -776,8 +797,11 @@ function renderProjection() {
 
       let paused = '';
       if (e.type === 'paycheck') {
-        const baseT = state.transfers[e.key] ?? 838;
-        if (e.amount < baseT - 0.5) paused = ` <span style="font-size:9px;color:var(--amber)">−${money(baseT - e.amount)} paused</span>`;
+        if (state.pausedWeeks[e.key]) paused = ` <span style="font-size:9px;color:var(--red)">paused</span>`;
+        else {
+          const baseT = state.transfers[e.key] ?? 838;
+          if (e.amount < baseT - 0.5) paused = ` <span style="font-size:9px;color:var(--amber)">−${money(baseT - e.amount)} paused</span>`;
+        }
       } else if (e.bill && FLEX_BILLS.includes(e.bill.id)) {
         const base = baseBillAmount(e.dueDate.getFullYear(), e.dueDate.getMonth(), e.bill.id);
         if (Math.abs(e.amount) < base - 0.5) paused = ` <span style="font-size:9px;color:var(--amber)">−${money(base - Math.abs(e.amount))} paused</span>`;
@@ -879,7 +903,7 @@ function renderSettings() {
     html += '</div></div>';
   });
   html += `<div class="section-title" style="margin-top:20px">Data</div>
-    <button class="reset-btn" onclick="if(confirm('Reset transfers, toggles, custom amounts, custom bills, bill name/date edits, pause settings, and weekly skips? Your savings goals and logged contributions will be kept.')){state.transfers={...defaults};state.toggles=JSON.parse(JSON.stringify(defaultToggles));state.amounts={};state.customBills=[];state.skips={};state.billMeta={};state.pauseMode={};saveState();renderDashboard();renderProjection();renderSettings();alert('Reset done.');}">Reset Plan to Defaults</button>
+    <button class="reset-btn" onclick="if(confirm('Reset transfers, toggles, custom amounts, custom bills, bill name/date edits, pause settings, paused weeks, and weekly skips? Your savings goals and logged contributions will be kept.')){state.transfers={...defaults};state.toggles=JSON.parse(JSON.stringify(defaultToggles));state.amounts={};state.customBills=[];state.skips={};state.billMeta={};state.pauseMode={};state.pausedWeeks={};saveState();renderDashboard();renderProjection();renderSettings();alert('Reset done.');}">Reset Plan to Defaults</button>
     <button class="reset-btn" onclick="if(confirm('Delete ALL logged savings contributions? This cannot be undone.')){state.contributions=[];saveState();renderDashboard();renderSavings();alert('Contributions cleared.');}">Clear All Contributions</button>`;
   el.innerHTML = html;
 }
