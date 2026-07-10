@@ -324,7 +324,7 @@ function billsForMonth(year, month) {
 }
 
 function paychecksInMonth(year, month) {
-  return getThursdays().filter(d => d.getFullYear() === year && d.getMonth() === month && !SKIP_DATES.includes(fmtKey(d))).length;
+  return getThursdays().filter(d => d.getFullYear() === year && d.getMonth() === month && ! SKIP_DATES.includes(fmtKey(d))).length;
 }
 
 function baseBillAmount(year, month, billId) {
@@ -364,10 +364,7 @@ function effectiveTransfer(d) {
   FLEX_BILLS.forEach(billId => {
     const monthPaused = tog[billId] === false;
     const weekSkipped = skipped.includes(billId);
-    // A one-off weekly skip always keeps its slice in checking.
     if (weekSkipped) { t -= weekSlice(y, m, billId); return; }
-    // A full-month pause keeps cash in checking ONLY when its mode is 'checking' (default).
-    // In 'expense' mode transfers stay full, so the freed cash pools in the expense account.
     if (monthPaused) {
       const mode = (state.pauseMode[mk] && state.pauseMode[mk][billId]) || 'checking';
       if (mode === 'checking') t -= weekSlice(y, m, billId);
@@ -462,6 +459,7 @@ function renderDashboard() {
     if (e.date <= now) { liveBalance = e.balance; lastEvent = e; }
     else if (!nextEvent) { nextEvent = e; }
   }
+  const liveClass = liveBalance < 0 ? 'red' : liveBalance < 50 ? 'amber' : 'green';
   const mn = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   let nextLabel = '';
   if (nextEvent) {
@@ -477,8 +475,7 @@ function renderDashboard() {
 
   let alerts = '';
   if (minBal < 0) alerts = `<div class="alert-card danger"><div class="alert-title">Account Goes Negative</div>Expense account hits ${money(minBal)} on ${fmt(minDate)}. Adjust transfers or pause a bill.</div>`;
-  else if (minBal < 50) alerts = `<div class="alert-card warn"><div class="alert-title">Tight Spot Ahead</div>Drops to ${money(minBal)} on ${fmt(minDate)}. Don't charge anything extra that day.</div>`;
-  else alerts = `<div class="alert-card ok"><div class="alert-title">All Clear</div>Expense account stays above ${money(minBal)} through Feb 2027.</div>`;
+  else alerts = `<div class="alert-card ok"><div class="alert-title">All Clear</div>Expense account stays at or above $0 through Feb 2027 (low point ${money(minBal)} on ${fmt(minDate)}).</div>`;
 
   let savHtml = '';
   allSavingsAccounts().forEach(a => {
