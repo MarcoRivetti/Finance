@@ -889,4 +889,178 @@ function renderSettings() {
       const isDefault = !b.recurring && !b.month;
       const tag = b.recurring ? ' <span style="font-size:10px;color:var(--blue)">RECURRING</span>' : (b.month ? ' <span style="font-size:10px;color:var(--amber)">ONE-OFF</span>' : '');
       const delBtn = (b.recurring || b.month) ? ` <button class="del-btn" style="font-size:16px" onclick="delCustomBill('${b.id}')">×</button>` : '';
-      const metaE
+      const metaEdited = isDefault && state.billMeta[b.id] && (state.billMeta[b.id].name !== undefined || state.billMeta[b.id].day !== undefined);
+      const ord = (n) => { const s = ['th','st','nd','rd'], v = n % 100; return n + (s[(v-20)%10] || s[v] || s[0]); };
+      const sub = isDefault
+        ? `<div style="font-size:12px;color:var(--muted);margin-top:2px">Due the ${ord(b.day)}${metaEdited ? ' <span style="color:var(--amber)">· edited</span>' : ''} <button onclick="editBill('${b.id}')" style="background:none;border:none;color:var(--blue);font-size:12px;font-weight:500;cursor:pointer;padding:0 0 0 4px;font-family:inherit">Edit</button></div>`
+        : '';
+      let freed = '';
+      if (!on && FLEX_BILLS.includes(b.id)) {
+        const mode = (state.pauseMode[mk] && state.pauseMode[mk][b.id]) || 'checking';
+        const pill = (val, lbl) => `<button onclick="setPauseMode('${mk}','${b.id}','${val}')" style="font-size:11px;font-weight:600;font-family:inherit;cursor:pointer;border:none;border-radius:99px;padding:3px 10px;margin-right:6px;${mode===val?'background:var(--blue);color:#fff':'background:var(--card2);color:var(--muted)'}">${lbl}</button>`;
+        freed = `<div style="margin-top:6px">
+          <div style="font-size:11px;color:var(--muted);margin-bottom:4px">Freed cash goes to</div>
+          ${pill('checking','Checking')}${pill('expense','Expense acct')}
+        </div>`;
+      }
+      html += `<div class="toggle-row">
+        <span style="flex:1">
+          <span class="toggle-label">${b.name}${tag}${isCustom ? ' <span style="font-size:11px;color:var(--amber)">●</span>' : ''}${delBtn}</span>
+          ${sub}
+          ${freed}
+        </span>
+        <span style="font-size:14px;color:var(--muted);margin-right:6px">$</span>
+        <input class="week-input" type="number" value="${amt}" data-month="${mk}" data-bill="${b.id}" onchange="updateBillAmount(this)" style="width:72px;margin-right:10px">
+        <button class="toggle ${on ? 'on' : ''}" data-month="${mk}" data-bill="${b.id}" onclick="toggleBill(this)"></button>
+      </div>`;
+    });
+    html += '</div></div>';
+  });
+  html += `<div class="section-title" style="margin-top:20px">Data</div>
+    <button class="reset-btn" onclick="if(confirm('Reset transfers, toggles, custom amounts, custom bills, bill name/date edits, pause settings, paused weeks, and weekly skips? Your savings goals and logged contributions will be kept.')){state.transfers={...defaults};state.toggles=JSON.parse(JSON.stringify(defaultToggles));state.amounts={};state.customBills=[];state.skips={};state.billMeta={};state.pauseMode={};state.pausedWeeks={};saveState();renderDashboard();renderProjection();renderSettings();alert('Reset done.');}">Reset Plan to Defaults</button>
+    <button class="reset-btn" onclick="if(confirm('Delete ALL logged savings contributions? This cannot be undone.')){state.contributions=[];saveState();renderDashboard();renderSavings();alert('Contributions cleared.');}">Clear All Contributions</button>`;
+  el.innerHTML = html;
+}
+
+function updateTransfer(input) {
+  state.transfers[input.dataset.key] = Math.max(0, Math.min(1038, parseInt(input.value) || 0));
+  saveState();
+  renderDashboard();
+  renderProjection();
+  renderWeeks();
+}
+function updateStart() {
+  const bal = parseFloat(document.getElementById('startBal').value);
+  const dt = document.getElementById('startDate').value;
+  if (!isNaN(bal)) state.startBalance = bal;
+  if (dt) state.startDate = dt;
+  saveState();
+  renderDashboard();
+  renderProjection();
+}
+function toggleBill(btn) {
+  const mk = btn.dataset.month, bid = btn.dataset.bill;
+  if (!state.toggles[mk]) state.toggles[mk] = {};
+  state.toggles[mk][bid] = state.toggles[mk][bid] === false ? true : false;
+  btn.classList.toggle('on');
+  openMonths.add(mk);
+  saveState();
+  renderDashboard();
+  renderProjection();
+  renderWeeks();
+  renderSettings();
+}
+function toggleMonthCard(mk, headerEl) {
+  if (openMonths.has(mk)) openMonths.delete(mk);
+  else openMonths.add(mk);
+  const body = headerEl.nextElementSibling;
+  body.style.display = openMonths.has(mk) ? 'block' : 'none';
+}
+function setPauseMode(mk, bid, mode) {
+  if (!state.pauseMode[mk]) state.pauseMode[mk] = {};
+  state.pauseMode[mk][bid] = mode;
+  openMonths.add(mk);
+  saveState();
+  renderDashboard();
+  renderProjection();
+  renderWeeks();
+  renderSettings();
+}
+function editBill(billId) {
+  const base = BILLS.find(b => b.id === billId);
+  if (!base) return;
+  const meta = state.billMeta[billId] || {};
+  const curName = meta.name !== undefined ? meta.name : base.name;
+  const curDay = meta.day !== undefined ? meta.day : base.day;
+  const newName = prompt('Bill name:', curName);
+  if (newName === null) return;
+  const dayRaw = prompt('Day of month it\'s due (1-28):', String(curDay));
+  if (dayRaw === null) return;
+  let day = parseInt(dayRaw);
+  if (isNaN(day) || day < 1) day = 1;
+  if (day > 28) day = 28;
+  if (!state.billMeta[billId]) state.billMeta[billId] = {};
+  const nm = newName.trim();
+  if (nm === '' || nm === base.name) delete state.billMeta[billId].name;
+  else state.billMeta[billId].name = nm;
+  if (day === base.day) delete state.billMeta[billId].day;
+  else state.billMeta[billId].day = day;
+  if (Object.keys(state.billMeta[billId]).length === 0) delete state.billMeta[billId];
+  saveState();
+  renderDashboard();
+  renderProjection();
+  renderSettings();
+}
+function addCustomBill() {
+  const name = prompt('Bill name (e.g. Phone):');
+  if (!name) return;
+  const amtRaw = prompt('Amount ($):');
+  const amount = parseFloat(amtRaw);
+  if (isNaN(amount)) return;
+  const dayRaw = prompt('Day of month it\'s due (1-28):');
+  let day = parseInt(dayRaw);
+  if (isNaN(day) || day < 1) day = 1;
+  if (day > 28) day = 28;
+  const rec = prompt('Type R for recurring every month, or O for one-off (just one month):', 'R');
+  const recurring = !rec || rec.trim().toUpperCase().startsWith('R');
+  const bill = { id: 'cb' + Date.now() + Math.random().toString(36).slice(2,6), name, amount, day, recurring };
+  if (!recurring) {
+    const monthRaw = prompt('Which month? Type like "Aug 2026" or "8/2026":');
+    if (!monthRaw) { alert('No month entered. Bill not added.'); return; }
+    const mnames = ['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'];
+    let mIdx = -1, yr = -1;
+    const s = monthRaw.trim().toLowerCase();
+    const slash = s.match(/^(\d{1,2})\s*[\/\-]\s*(\d{4})$/);
+    if (slash) { mIdx = parseInt(slash[1]) - 1; yr = parseInt(slash[2]); }
+    else {
+      const parts = s.split(/\s+/);
+      if (parts.length === 2) {
+        mIdx = mnames.findIndex(n => parts[0].startsWith(n));
+        yr = parseInt(parts[1]);
+      }
+    }
+    if (mIdx < 0 || mIdx > 11 || isNaN(yr)) { alert('Could not read that month. Bill not added.'); return; }
+    bill.month = `${yr}-${mIdx}`;
+  }
+  state.customBills.push(bill);
+  saveState();
+  renderDashboard();
+  renderProjection();
+  renderSettings();
+}
+function delCustomBill(id) {
+  if (!confirm('Delete this custom bill?')) return;
+  state.customBills = state.customBills.filter(b => b.id !== id);
+  saveState();
+  renderDashboard();
+  renderProjection();
+  renderSettings();
+}
+function updateBillAmount(input) {
+  const mk = input.dataset.month, bid = input.dataset.bill;
+  const val = parseFloat(input.value);
+  if (!state.amounts[mk]) state.amounts[mk] = {};
+  if (isNaN(val)) { delete state.amounts[mk][bid]; }
+  else { state.amounts[mk][bid] = val; }
+  openMonths.add(mk);
+  saveState();
+  renderDashboard();
+  renderProjection();
+  renderSettings();
+}
+function switchTab(id) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.querySelector(`[data-tab="${id}"]`).classList.add('active');
+  document.getElementById(id).classList.add('active');
+  if (id === 'savings') renderSavings();
+  if (id === 'weeks') renderWeeks();
+  if (id === 'projection') renderProjection();
+  if (id === 'settings') renderSettings();
+  if (id === 'dashboard') renderDashboard();
+}
+
+renderDashboard();
+</script>
+</body>
+</html>
