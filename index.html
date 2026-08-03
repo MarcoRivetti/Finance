@@ -289,10 +289,6 @@ if (!state.billMeta) state.billMeta = {};
 if (!state.pauseMode) state.pauseMode = {};
 if (!state.pausedWeeks) state.pausedWeeks = {};
 
-// One-time migration: if a change lowers/raises a bill, weeks left at the old flat 838
-// don't need touching — the transfer is driven live from state.transfers. Nothing to migrate
-// on the fresh v3 store.
-
 const FLEX_BILLS = ['extra103', 'roth', 'brokerage'];
 let openWeeks = new Set();
 let openMonths = new Set();
@@ -496,6 +492,7 @@ function applyFlatTransfer() {
 
 // Size ONE month's weekly transfers to just that month's active bills, spread over its
 // paychecks. Other months are untouched, so a one-month blip snaps back automatically.
+// active-bill total ÷ paychecks that month, rounded up, capped at 1038.
 function monthTransferRate(y, m) {
   let total = 0;
   const tog = state.toggles[`${y}-${m}`] || {};
@@ -504,6 +501,20 @@ function monthTransferRate(y, m) {
   });
   const pc = paychecksInMonth(y, m);
   return pc > 0 ? Math.min(1038, Math.ceil(total / pc)) : 0;
+}
+
+// Summarize the weekly transfers currently set for a month's paid weeks.
+// Returns { count, all: [amounts], uniform: true/false, min, max }.
+function monthWeeklyTransfers(y, m) {
+  const amts = [];
+  getThursdays().forEach(d => {
+    if (d.getFullYear() !== y || d.getMonth() !== m) return;
+    const k = fmtKey(d);
+    if (SKIP_DATES.includes(k)) return;
+    amts.push(Math.round(effectiveTransfer(d)));
+  });
+  const uniform = amts.length > 0 && amts.every(a => a === amts[0]);
+  return { count: amts.length, all: amts, uniform, min: Math.min(...amts), max: Math.max(...amts) };
 }
 
 function applyMonthTransfer(mk) {
@@ -954,7 +965,17 @@ function renderSettings() {
     const isOpen = openMonths.has(mk);
     html += `<div class="card"><div class="card-header" onclick="toggleMonthCard('${mk}', this)"><span class="card-title">${mn[m]} ${y}</span><span style="font-size:15px;font-weight:700;color:var(--green)">${money(monthTotal)}/mo</span></div><div class="card-body" style="display:${isOpen ? 'block' : 'none'}">`;
     html += `<div class="month-total"><span>Total active bills</span><span style="color:var(--green)">${money(monthTotal)}</span></div>`;
-    html += `<div style="display:flex;align-items:center;justify-content:space-between;padding:2px 0 10px"><span style="font-size:12px;color:var(--muted)">Set just this month's weekly transfer to ${money(monthTransferRate(y, m))}/wk</span><button onclick="applyMonthTransfer('${mk}')" style="background:none;border:none;color:var(--blue);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;padding:2px 4px">Auto-set month</button></div>`;
+    const wt = monthWeeklyTransfers(y, m);
+    const rate = monthTransferRate(y, m);
+    const curLabel = wt.count === 0 ? '—' : (wt.uniform ? `${money(wt.all[0])}/wk` : `${money(wt.min)}–${money(wt.max)}/wk`);
+    html += `<div style="background:var(--card2);border-radius:var(--radius-sm);padding:12px 14px;margin:4px 0 12px">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:2px">
+        <span style="font-size:13px;color:var(--muted)">Weekly transfers this month</span>
+        <span style="font-size:17px;font-weight:700">${curLabel}</span>
+      </div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:10px">${wt.count} paid week${wt.count === 1 ? '' : 's'}${wt.uniform ? '' : ' · varies'} · auto-set target ${money(rate)}/wk</div>
+      <button type="button" onclick="applyMonthTransfer('${mk}')" style="width:100%;background:var(--blue);color:#fff;border:none;border-radius:var(--radius-sm);padding:11px;font-size:15px;font-weight:600;cursor:pointer;font-family:inherit">Auto-set this month to ${money(rate)}/wk</button>
+    </div>`;
     monthBills.forEach(b => {
       const on = state.toggles[mk][b.id] !== false;
       const amt = billAmount(y, m, b.id);
