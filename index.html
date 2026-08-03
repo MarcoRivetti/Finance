@@ -69,13 +69,13 @@
       padding: 8px max(env(safe-area-inset-left, 0px), 6px) max(env(safe-area-inset-bottom, 0px), 14px) max(env(safe-area-inset-right, 0px), 6px);
     }
     .tab {
-      flex: 1; padding: 4px 2px; text-align: center;
-      font-size: 10px; font-weight: 500; color: var(--muted);
+      flex: 1; padding: 4px 1px; text-align: center;
+      font-size: 9.5px; font-weight: 500; color: var(--muted);
       border: none; background: none; cursor: pointer;
       transition: color 0.15s;
       display: flex; flex-direction: column; align-items: center; gap: 3px;
     }
-    .tab svg { width: 25px; height: 25px; display: block; }
+    .tab svg { width: 23px; height: 23px; display: block; }
     .tab svg * { fill: var(--muted); transition: fill 0.15s; }
     .tab.active { color: var(--blue); }
     .tab.active svg * { fill: var(--blue); }
@@ -205,6 +205,8 @@
     <svg viewBox="0 0 24 24"><path d="M7 2v2H5.5A2.5 2.5 0 003 6.5v12A2.5 2.5 0 005.5 21h13a2.5 2.5 0 002.5-2.5v-12A2.5 2.5 0 0018.5 4H17V2h-2v2H9V2H7zm11.5 6v10.5a.5.5 0 01-.5.5H6a.5.5 0 01-.5-.5V8h13z"/></svg>Weeks</button>
   <button class="tab" data-tab="projection" onclick="switchTab('projection')">
     <svg viewBox="0 0 24 24"><path d="M4 3a1 1 0 00-1 1v15a2 2 0 002 2h15a1 1 0 100-2H5V4a1 1 0 00-1-1zm4 11a1 1 0 00-1 1v2a1 1 0 102 0v-2a1 1 0 00-1-1zm4-5a1 1 0 00-1 1v7a1 1 0 102 0v-7a1 1 0 00-1-1zm4-3a1 1 0 00-1 1v10a1 1 0 102 0V8a1 1 0 00-1-1z"/></svg>Plan</button>
+  <button class="tab" data-tab="prices" onclick="switchTab('prices')">
+    <svg viewBox="0 0 24 24"><path d="M11.6 2.6a2 2 0 011.4.6l7.8 7.8a2 2 0 010 2.8l-6.6 6.6a2 2 0 01-2.8 0L3.6 12.6A2 2 0 013 11.2V4.6a2 2 0 012-2h6.6zM7.5 6A1.5 1.5 0 106 7.5 1.5 1.5 0 007.5 6z"/></svg>Prices</button>
   <button class="tab" data-tab="settings" onclick="switchTab('settings')">
     <svg viewBox="0 0 24 24"><path d="M12 8.5a3.5 3.5 0 100 7 3.5 3.5 0 000-7zm0 2a1.5 1.5 0 110 3 1.5 1.5 0 010-3zm-1-8.5-.4 2.3a7.7 7.7 0 00-1.6.9L6.8 4.3 4.3 6.8l1 2.1a7.7 7.7 0 00-.9 1.6L2 11v2l2.3.4c.2.6.5 1.1.9 1.6l-1 2.1 2.5 2.5 2.1-1c.5.4 1 .7 1.6.9L11 22h2l.4-2.3c.6-.2 1.1-.5 1.6-.9l2.1 1 2.5-2.5-1-2.1c.4-.5.7-1 .9-1.6L22 13v-2l-2.3-.4a7.7 7.7 0 00-.9-1.6l1-2.1-2.5-2.5-2.1 1a7.7 7.7 0 00-1.6-.9L13 2h-2z"/></svg>More</button>
 </div>
@@ -213,9 +215,17 @@
 <div id="savings" class="panel"></div>
 <div id="weeks" class="panel"></div>
 <div id="projection" class="panel"></div>
+<div id="prices" class="panel"></div>
 <div id="settings" class="panel"></div>
 
 <script>
+// Surface any load-time error visibly instead of a silent blank screen.
+window.addEventListener('error', function (e) {
+  const box = document.createElement('div');
+  box.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:9999;background:#3a1512;color:#ffb3ad;font:12px -apple-system,monospace;padding:12px 14px;white-space:pre-wrap;';
+  box.textContent = 'App error: ' + (e.message || e.error) + '\n' + (e.filename ? e.filename + ':' + e.lineno + ':' + e.colno : '');
+  document.body.appendChild(box);
+});
 const BILLS = [
   { id: 'monarch', name: 'Monarch Money', amount: 15, day: 23 },
   { id: 'loan101', name: 'Loan 1-101 (2.75%)', amount: 53, day: 12 },
@@ -225,8 +235,8 @@ const BILLS = [
   { id: 'carins', name: 'Car insurance', amount: 500, day: 28 },
   { id: 'carpay', name: 'Car payment', amount: 415, day: 28 },
   { id: 'hysa', name: 'Amex HYSA', amount: 1000, day: 28 },
-  { id: 'roth', name: 'Roth IRA', amount: 680, day: 28 },
-  { id: 'brokerage', name: 'Brokerage', amount: 230, day: 28 }
+  { id: 'roth', name: 'Roth IRA', amount: 600, day: 28 },
+  { id: 'brokerage', name: 'Brokerage', amount: 200, day: 28 }
 ];
 
 const SAVINGS_ACCOUNTS = [
@@ -251,6 +261,7 @@ function getThursdays() {
 function fmt(d) { const m = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']; return `${m[d.getMonth()]} ${d.getDate()}`; }
 function fmtKey(d) { return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
 function money(n) { if (n < 0) return '-$' + Math.abs(Math.round(n)).toLocaleString(); return '$' + Math.round(n).toLocaleString(); }
+function ord(n) { const s = ['th','st','nd','rd'], v = n % 100; return n + (s[(v-20)%10] || s[v] || s[0]); }
 
 function loadState() { try { const s = localStorage.getItem('budget_v3'); return s ? JSON.parse(s) : null; } catch { return null; } }
 function saveState() { localStorage.setItem('budget_v3', JSON.stringify(state)); }
@@ -288,9 +299,10 @@ if (!state.done) state.done = {};
 if (!state.billMeta) state.billMeta = {};
 if (!state.pauseMode) state.pauseMode = {};
 if (!state.pausedWeeks) state.pausedWeeks = {};
+if (!state.basePrices) state.basePrices = {};
+if (!state.scheduledChanges) state.scheduledChanges = [];
 // One-time fix: the old start date (Jul 30) fell ON the first paycheck, so that transfer
-// counted on top of the $660 buffer (balance looked doubled). Anchor to Aug 2 — the date
-// you actually have $660 — which excludes the Jul 30 paycheck as already-happened.
+// counted on top of the $660 buffer. Anchor to Aug 2 — the date you actually have $660.
 if (!state.migratedStartAug2) {
   state.startBalance = 660;
   state.startDate = '2026-08-02';
@@ -322,9 +334,21 @@ function paychecksInMonth(year, month) {
   return getThursdays().filter(d => d.getFullYear() === year && d.getMonth() === month && !SKIP_DATES.includes(fmtKey(d))).length;
 }
 
+// Resolve a bill's base amount for a given month. Priority (highest first):
+//  1. per-month manual override (state.amounts)
+//  2. scheduled price change effective on/before this month (latest one wins)
+//  3. bulk base-price override (state.basePrices)
+//  4. the hardcoded default in BILLS
 function baseBillAmount(year, month, billId) {
   const mk = `${year}-${month}`;
   if (state.amounts[mk] && state.amounts[mk][billId] !== undefined) return state.amounts[mk][billId];
+  const sched = state.scheduledChanges
+    .filter(s => s.billId === billId)
+    .map(s => { const [sy, sm] = s.from.split('-').map(Number); return { ...s, ord: sy * 12 + sm }; })
+    .filter(s => s.ord <= year * 12 + month)
+    .sort((a, b) => b.ord - a.ord);
+  if (sched.length) return sched[0].amount;
+  if (state.basePrices[billId] !== undefined) return state.basePrices[billId];
   const b = billsForMonth(year, month).find(x => x.id === billId);
   return b ? b.amount : 0;
 }
@@ -439,9 +463,7 @@ function findCurrentWeek() {
 }
 
 // Minimum flat weekly transfer that keeps the expense account at or above $0 through the
-// end of the plan, given the current bills, start balance, pauses and skips. Simulates a
-// candidate flat rate applied to every non-skip week and binary-searches the smallest one
-// that never goes negative. Rounded up to the nearest dollar.
+// end of the plan. Binary-searches the smallest flat rate that never goes negative.
 function minFlatTransfer() {
   const thursdays = getThursdays();
   const startD = new Date((state.startDate || '2026-08-02') + 'T00:00:00');
@@ -509,16 +531,12 @@ function flashFlatButton(btn, msg) {
   setTimeout(() => { renderSettings(); }, 900);
 }
 
-// The per-month "Set this month" button applies the same cycle-wide constant rate
-// (minFlatTransfer) to that month's weeks. Recomputes live.
 function monthTransferRate(y, m) {
   return minFlatTransfer();
 }
 
-// Summarize the weekly transfers currently set for a month's paid weeks.
-// `all` = effective amounts that actually move (after pauses/skips reduce them).
-// `base` = the stored transfer before those reductions — this is what we compare against
-// the constant rate, so a month with pauses isn't wrongly flagged as "off rate".
+// Summarize a month's weekly transfers. `all` = effective (after pauses), `base` = stored
+// (before pauses) — the base is what we compare to the constant rate for the "off rate" flag.
 function monthWeeklyTransfers(y, m) {
   const amts = [];
   const baseAmts = [];
@@ -550,7 +568,6 @@ function applyMonthTransfer(mk, btn) {
   flashButton(btn, `✓ Set to ${money(rate)}/wk`);
 }
 
-// Snap a month's weekly transfers back to the cycle-wide constant rate (minFlatTransfer).
 function resetMonthTransfer(mk, btn) {
   const [y, m] = mk.split('-').map(Number);
   const rate = minFlatTransfer();
@@ -975,6 +992,134 @@ function toggleDone(ek, btn) {
   renderProjection();
 }
 
+// --- Prices tab: bulk base-price editor + scheduled price changes ---
+
+function priceEditableBills() {
+  const out = BILLS.map(b => {
+    const meta = state.billMeta[b.id];
+    return { id: b.id, name: meta && meta.name !== undefined ? meta.name : b.name, day: (meta && meta.day !== undefined) ? meta.day : b.day, def: b.amount, custom: false };
+  });
+  state.customBills.filter(b => b.recurring).forEach(b => {
+    out.push({ id: b.id, name: b.name, day: b.day, def: b.amount, custom: true });
+  });
+  return out.sort((a, b) => a.day - b.day);
+}
+
+function currentBasePrice(bill) {
+  if (state.basePrices[bill.id] !== undefined) return state.basePrices[bill.id];
+  return bill.def;
+}
+
+function renderPrices() {
+  const el = document.getElementById('prices');
+  const mn = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const bills = priceEditableBills();
+
+  let html = '<div class="section-title">Bill Prices</div><p style="font-size:12px;color:var(--muted);margin-bottom:12px">Edit every bill\'s base price in one place. Changes apply to all months. After editing, tap the constant-rate button in More to fold the new totals into your weekly transfer. Use scheduled changes below for a price that starts in a future month.</p>';
+
+  html += '<div class="card"><div style="padding:6px 16px 10px">';
+  bills.forEach(b => {
+    const cur = currentBasePrice(b);
+    const overridden = state.basePrices[b.id] !== undefined && state.basePrices[b.id] !== b.def;
+    html += `<div class="toggle-row">
+      <span style="flex:1">
+        <span class="toggle-label">${b.name}${b.custom ? ' <span style="font-size:9px;color:var(--blue)">RECURRING</span>' : ''}</span>
+        <div style="font-size:11px;color:var(--muted);margin-top:1px">Due the ${ord(b.day)} · default ${money(b.def)}${overridden ? ` <span style="color:var(--amber)">· set to ${money(cur)}</span>` : ''}</div>
+      </span>
+      <span style="font-size:12px;color:var(--muted);margin-right:6px">$</span>
+      <input class="week-input" type="number" value="${cur}" data-bill="${b.id}" data-def="${b.def}" onchange="updateBasePrice(this)" style="width:80px">
+    </div>`;
+  });
+  html += '</div></div>';
+
+  html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:16px 0 8px"><span class="section-title" style="padding:0">Scheduled Changes</span><button class="btn-add" onclick="addScheduledChange()">+ Change</button></div>';
+  html += '<p style="font-size:12px;color:var(--muted);margin-bottom:12px">Schedule a bill to switch to a new amount starting in a chosen month. From that month onward the plan uses the new price. The latest change on or before a given month wins.</p>';
+
+  const changes = [...state.scheduledChanges].sort((a, b) => {
+    const [ay, am] = a.from.split('-').map(Number);
+    const [by, bm] = b.from.split('-').map(Number);
+    return (ay * 12 + am) - (by * 12 + bm);
+  });
+  if (changes.length === 0) {
+    html += '<div class="card"><div style="padding:16px;font-size:13px;color:var(--muted)">No scheduled changes. Tap “+ Change” to add one.</div></div>';
+  } else {
+    html += '<div class="card"><div style="padding:6px 16px 10px">';
+    changes.forEach(c => {
+      const bill = bills.find(b => b.id === c.billId);
+      const nm = bill ? bill.name : c.billId;
+      const [cy, cm] = c.from.split('-').map(Number);
+      html += `<div class="toggle-row">
+        <span style="flex:1">
+          <span class="toggle-label">${nm}</span>
+          <div style="font-size:11px;color:var(--muted);margin-top:1px">→ ${money(c.amount)} starting ${mn[cm]} ${cy}</div>
+        </span>
+        <button class="del-btn" style="font-size:20px" onclick="delScheduledChange('${c.id}')">×</button>
+      </div>`;
+    });
+    html += '</div></div>';
+  }
+
+  html += `<button class="reset-btn" style="color:var(--blue)" onclick="applyFlatTransfer(this); switchTab('settings')">Recalculate constant transfer now</button>`;
+
+  el.innerHTML = html;
+}
+
+function updateBasePrice(input) {
+  const bid = input.dataset.bill;
+  const def = parseFloat(input.dataset.def);
+  const val = parseFloat(input.value);
+  if (isNaN(val)) { delete state.basePrices[bid]; }
+  else if (val === def) { delete state.basePrices[bid]; }
+  else { state.basePrices[bid] = val; }
+  saveState();
+  renderDashboard();
+  renderProjection();
+  renderSettings();
+  renderPrices();
+}
+
+function addScheduledChange() {
+  const bills = priceEditableBills();
+  const list = bills.map((b, i) => `${i + 1}. ${b.name}`).join('\n');
+  const pickRaw = prompt('Which bill? Enter its number:\n\n' + list);
+  if (pickRaw === null) return;
+  const idx = parseInt(pickRaw) - 1;
+  if (isNaN(idx) || idx < 0 || idx >= bills.length) { alert('That wasn\'t a valid number.'); return; }
+  const bill = bills[idx];
+  const amtRaw = prompt(`New amount for ${bill.name} ($):`, String(currentBasePrice(bill)));
+  if (amtRaw === null) return;
+  const amount = parseFloat(amtRaw);
+  if (isNaN(amount)) { alert('That wasn\'t a valid amount.'); return; }
+  const monthRaw = prompt('Starting which month? Type like "Nov 2026" or "11/2026":');
+  if (!monthRaw) return;
+  const mnames = ['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'];
+  let mIdx = -1, yr = -1;
+  const s = monthRaw.trim().toLowerCase();
+  const slash = s.match(/^(\d{1,2})\s*[\/\-]\s*(\d{4})$/);
+  if (slash) { mIdx = parseInt(slash[1]) - 1; yr = parseInt(slash[2]); }
+  else {
+    const parts = s.split(/\s+/);
+    if (parts.length === 2) { mIdx = mnames.findIndex(n => parts[0].startsWith(n)); yr = parseInt(parts[1]); }
+  }
+  if (mIdx < 0 || mIdx > 11 || isNaN(yr)) { alert('Could not read that month.'); return; }
+  state.scheduledChanges.push({ id: 'sc' + Date.now() + Math.random().toString(36).slice(2,6), billId: bill.id, amount, from: `${yr}-${mIdx}` });
+  saveState();
+  renderDashboard();
+  renderProjection();
+  renderSettings();
+  renderPrices();
+}
+
+function delScheduledChange(id) {
+  if (!confirm('Delete this scheduled change?')) return;
+  state.scheduledChanges = state.scheduledChanges.filter(c => c.id !== id);
+  saveState();
+  renderDashboard();
+  renderProjection();
+  renderSettings();
+  renderPrices();
+}
+
 function renderSettings() {
   const el = document.getElementById('settings');
   const mn = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -1009,8 +1154,6 @@ function renderSettings() {
     html += `<div class="month-total"><span>Total active bills</span><span style="color:var(--green)">${money(monthTotal)}</span></div>`;
     const wt = monthWeeklyTransfers(y, m);
     const rate = minFlatTransfer();
-    // On-rate = every week not fully paused is set to the constant rate at its base (before
-    // pause reductions). Whole-week pauses (base 0) are intentional and don't count as off-rate.
     const nonPausedBase = wt.base.filter(a => a > 0);
     const offRate = nonPausedBase.length > 0 && !nonPausedBase.every(a => a === rate);
     const trimmed = wt.all.some((a, i) => a < wt.base[i]);
@@ -1032,7 +1175,6 @@ function renderSettings() {
       const tag = b.recurring ? ' <span style="font-size:9px;color:var(--blue)">RECURRING</span>' : (b.month ? ' <span style="font-size:9px;color:var(--amber)">ONE-OFF</span>' : '');
       const delBtn = (b.recurring || b.month) ? ` <button class="del-btn" style="font-size:14px" onclick="delCustomBill('${b.id}')">×</button>` : '';
       const metaEdited = isDefault && state.billMeta[b.id] && (state.billMeta[b.id].name !== undefined || state.billMeta[b.id].day !== undefined);
-      const ord = (n) => { const s = ['th','st','nd','rd'], v = n % 100; return n + (s[(v-20)%10] || s[v] || s[0]); };
       const sub = isDefault
         ? `<div style="font-size:11px;color:var(--muted);margin-top:1px">Due the ${ord(b.day)}${metaEdited ? ' <span style="color:var(--amber)">· edited</span>' : ''} <button onclick="editBill('${b.id}')" style="background:none;border:none;color:var(--blue);font-size:11px;font-weight:600;cursor:pointer;padding:0 0 0 4px;font-family:inherit">Edit</button></div>`
         : '';
@@ -1059,7 +1201,7 @@ function renderSettings() {
     html += '</div></div>';
   });
   html += `<div class="section-title" style="margin-top:20px">Data</div>
-    <button class="reset-btn" onclick="if(confirm('Reset transfers, toggles, custom amounts, custom bills, bill name/date edits, pause settings, paused weeks, and weekly skips? Your savings goals and logged contributions will be kept.')){state.transfers={...defaults};state.toggles=JSON.parse(JSON.stringify(defaultToggles));state.amounts={};state.customBills=[];state.skips={};state.billMeta={};state.pauseMode={};state.pausedWeeks={};saveState();renderDashboard();renderProjection();renderSettings();alert('Reset done.');}">Reset Plan to Defaults</button>
+    <button class="reset-btn" onclick="if(confirm('Reset transfers, toggles, custom amounts, custom bills, bill name/date edits, bulk prices, scheduled changes, pause settings, paused weeks, and weekly skips? Your savings goals and logged contributions will be kept.')){state.transfers={...defaults};state.toggles=JSON.parse(JSON.stringify(defaultToggles));state.amounts={};state.customBills=[];state.skips={};state.billMeta={};state.basePrices={};state.scheduledChanges=[];state.pauseMode={};state.pausedWeeks={};saveState();renderDashboard();renderProjection();renderSettings();alert('Reset done.');}">Reset Plan to Defaults</button>
     <button class="reset-btn" onclick="if(confirm('Delete ALL logged savings contributions? This cannot be undone.')){state.contributions=[];saveState();renderDashboard();renderSavings();alert('Contributions cleared.');}">Clear All Contributions</button>`;
   el.innerHTML = html;
 }
@@ -1198,11 +1340,18 @@ function switchTab(id) {
   if (id === 'savings') renderSavings();
   if (id === 'weeks') renderWeeks();
   if (id === 'projection') renderProjection();
+  if (id === 'prices') renderPrices();
   if (id === 'settings') renderSettings();
   if (id === 'dashboard') renderDashboard();
 }
 
-renderDashboard();
+try {
+  renderDashboard();
+} catch (err) {
+  const el = document.getElementById('dashboard');
+  if (el) el.innerHTML = `<div class="alert-card danger" style="margin-top:16px"><div class="alert-title">Couldn't load your saved plan</div>${(err && err.message) || err}<br><br><button class="add-btn" onclick="localStorage.removeItem('budget_v3');location.reload()">Reset saved data & reload</button></div>`;
+  throw err;
+}
 </script>
 </body>
 </html>
