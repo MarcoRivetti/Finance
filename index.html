@@ -510,22 +510,28 @@ function flashFlatButton(btn, msg) {
 }
 
 // The per-month "Set this month" button applies the same cycle-wide constant rate
-// (minFlatTransfer) to that month's weeks. This is the lowest flat weekly transfer that,
-// starting from your $660 buffer, keeps the account >= $0 through January. Recomputes live.
+// (minFlatTransfer) to that month's weeks. Recomputes live.
 function monthTransferRate(y, m) {
   return minFlatTransfer();
 }
 
+// Summarize the weekly transfers currently set for a month's paid weeks.
+// `all` = effective amounts that actually move (after pauses/skips reduce them).
+// `base` = the stored transfer before those reductions — this is what we compare against
+// the constant rate, so a month with pauses isn't wrongly flagged as "off rate".
 function monthWeeklyTransfers(y, m) {
   const amts = [];
+  const baseAmts = [];
   getThursdays().forEach(d => {
     if (d.getFullYear() !== y || d.getMonth() !== m) return;
     const k = fmtKey(d);
     if (SKIP_DATES.includes(k)) return;
     amts.push(Math.round(effectiveTransfer(d)));
+    baseAmts.push(state.pausedWeeks[k] ? 0 : Math.round(state.transfers[k] ?? 838));
   });
   const uniform = amts.length > 0 && amts.every(a => a === amts[0]);
-  return { count: amts.length, all: amts, uniform, min: Math.min(...amts), max: Math.max(...amts) };
+  const baseUniform = baseAmts.length > 0 && baseAmts.every(a => a === baseAmts[0]);
+  return { count: amts.length, all: amts, uniform, min: Math.min(...amts), max: Math.max(...amts), base: baseAmts, baseUniform };
 }
 
 function applyMonthTransfer(mk, btn) {
@@ -544,6 +550,7 @@ function applyMonthTransfer(mk, btn) {
   flashButton(btn, `✓ Set to ${money(rate)}/wk`);
 }
 
+// Snap a month's weekly transfers back to the cycle-wide constant rate (minFlatTransfer).
 function resetMonthTransfer(mk, btn) {
   const [y, m] = mk.split('-').map(Number);
   const rate = minFlatTransfer();
@@ -1002,14 +1009,19 @@ function renderSettings() {
     html += `<div class="month-total"><span>Total active bills</span><span style="color:var(--green)">${money(monthTotal)}</span></div>`;
     const wt = monthWeeklyTransfers(y, m);
     const rate = minFlatTransfer();
-    const offRate = wt.count > 0 && !(wt.uniform && wt.all[0] === rate);
+    // On-rate = every week not fully paused is set to the constant rate at its base (before
+    // pause reductions). Whole-week pauses (base 0) are intentional and don't count as off-rate.
+    const nonPausedBase = wt.base.filter(a => a > 0);
+    const offRate = nonPausedBase.length > 0 && !nonPausedBase.every(a => a === rate);
+    const trimmed = wt.all.some((a, i) => a < wt.base[i]);
     const curLabel = wt.count === 0 ? '—' : (wt.uniform ? `${money(wt.all[0])}/wk` : `${money(wt.min)}–${money(wt.max)}/wk`);
+    const noteTail = offRate ? ' · off rate' : (trimmed ? ' · trimmed by pauses' : '');
     html += `<div style="background:var(--card2);border-radius:var(--radius-sm);padding:12px 14px;margin:4px 0 12px">
       <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:2px">
         <span style="font-size:13px;color:var(--muted)">Weekly transfers this month</span>
         <span style="font-size:17px;font-weight:700;${offRate ? 'color:var(--amber)' : ''}">${curLabel}</span>
       </div>
-      <div style="font-size:12px;color:var(--muted);margin-bottom:10px">${wt.count} paid week${wt.count === 1 ? '' : 's'}${wt.uniform ? '' : ' · varies'} · constant rate ${money(rate)}/wk${offRate ? ' · off rate' : ''}</div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:10px">${wt.count} paid week${wt.count === 1 ? '' : 's'}${wt.uniform ? '' : ' · varies'} · constant rate ${money(rate)}/wk${noteTail}</div>
       <button type="button" onclick="applyMonthTransfer('${mk}', this)" style="width:100%;background:var(--blue);color:#fff;border:none;border-radius:var(--radius-sm);padding:11px;font-size:15px;font-weight:600;cursor:pointer;font-family:inherit">Set this month to ${money(rate)}/wk</button>
     </div>`;
     monthBills.forEach(b => {
