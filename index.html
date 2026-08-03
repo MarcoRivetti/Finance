@@ -127,12 +127,12 @@
     .flow-val.amber { color: var(--amber); }
 
     .alert-card { border-radius: var(--radius); padding: 14px 16px; margin-bottom: 12px; font-size: 14px; }
-    .alert-card.warn { background: var(--amber-bg); color: #ffd591; }
-    .alert-card.danger { background: var(--red-bg); color: #ffb3ad; }
-    .alert-card.ok { background: var(--green-bg); color: #9be8ac; }
-    .alert-title { font-weight: 600; margin-bottom: 3px; letter-spacing: -0.2px; color: var(--ink); }
+    .alert-card.warn { background: var(--amber-bg); }
+    .alert-card.danger { background: var(--red-bg); }
+    .alert-card.ok { background: var(--green-bg); }
+    .alert-title { font-weight: 600; margin-bottom: 3px; letter-spacing: -0.2px; }
 
-    .progress-bar { height: 8px; background: var(--card2); border-radius: 99px; margin-top: 9px; overflow: hidden; }
+    .progress-bar { height: 8px; background: var(--muted2); border-radius: 99px; margin-top: 9px; overflow: hidden; }
     .progress-fill { height: 100%; background: var(--green); border-radius: 99px; transition: width 0.3s; }
 
     .sav-account { background: var(--card); border-radius: var(--radius); margin-bottom: 12px; padding: 16px; }
@@ -279,7 +279,7 @@ let state = loadState() || { transfers: { ...defaults }, toggles: JSON.parse(JSO
 if (!state.toggles) state.toggles = JSON.parse(JSON.stringify(defaultToggles));
 if (!state.contributions) state.contributions = [];
 if (state.startBalance === undefined) state.startBalance = 660;
-if (!state.startDate) state.startDate = '2026-07-30';
+if (!state.startDate) state.startDate = '2026-08-02';
 if (!state.amounts) state.amounts = {};
 if (!state.customGoals) state.customGoals = [];
 if (!state.customBills) state.customBills = [];
@@ -288,6 +288,15 @@ if (!state.done) state.done = {};
 if (!state.billMeta) state.billMeta = {};
 if (!state.pauseMode) state.pauseMode = {};
 if (!state.pausedWeeks) state.pausedWeeks = {};
+// One-time fix: the old start date (Jul 30) fell ON the first paycheck, so that transfer
+// counted on top of the $660 buffer (balance looked doubled). Anchor to Aug 2 — the date
+// you actually have $660 — which excludes the Jul 30 paycheck as already-happened.
+if (!state.migratedStartAug2) {
+  state.startBalance = 660;
+  state.startDate = '2026-08-02';
+  state.migratedStartAug2 = true;
+  try { localStorage.setItem('budget_v3', JSON.stringify(state)); } catch {}
+}
 
 const FLEX_BILLS = ['extra103', 'roth', 'brokerage'];
 let openWeeks = new Set();
@@ -382,7 +391,7 @@ function simulate() {
   const thursdays = getThursdays();
   const events = [];
   let balance = state.startBalance || 0;
-  const startD = new Date((state.startDate || '2026-07-30') + 'T00:00:00');
+  const startD = new Date((state.startDate || '2026-08-02') + 'T00:00:00');
   const months = new Set();
   thursdays.forEach(d => {
     const key = fmtKey(d);
@@ -430,10 +439,12 @@ function findCurrentWeek() {
 }
 
 // Minimum flat weekly transfer that keeps the expense account at or above $0 through the
-// end of the plan, given the current bills, start balance, pauses and skips.
+// end of the plan, given the current bills, start balance, pauses and skips. Simulates a
+// candidate flat rate applied to every non-skip week and binary-searches the smallest one
+// that never goes negative. Rounded up to the nearest dollar.
 function minFlatTransfer() {
   const thursdays = getThursdays();
-  const startD = new Date((state.startDate || '2026-07-30') + 'T00:00:00');
+  const startD = new Date((state.startDate || '2026-08-02') + 'T00:00:00');
   const billEvents = [];
   const months = new Set();
   thursdays.forEach(d => months.add(`${d.getFullYear()}-${d.getMonth()}`));
@@ -468,7 +479,7 @@ function minFlatTransfer() {
     return min;
   };
   let lo = 0, hi = 1038;
-  if (lowest(hi) < 0) return hi; // even max can't cover; return the cap
+  if (lowest(hi) < 0) return hi;
   for (let i = 0; i < 24; i++) {
     const mid = (lo + hi) / 2;
     if (lowest(mid) >= 0) hi = mid; else lo = mid;
@@ -489,7 +500,6 @@ function applyFlatTransfer(btn) {
   flashFlatButton(btn, `✓ Flat rate set to ${money(rate)}/wk`);
 }
 
-// Confirmation flash for the flat-transfer button (a .reset-btn), then re-render settings.
 function flashFlatButton(btn, msg) {
   if (!btn) { renderSettings(); return; }
   btn.textContent = msg;
@@ -499,25 +509,13 @@ function flashFlatButton(btn, msg) {
   setTimeout(() => { renderSettings(); }, 900);
 }
 
-// Size ONE month's weekly transfers to just that month's active bills, spread over its
-// paychecks. Other months are untouched, so a one-month blip snaps back automatically.
-// active-bill total ÷ paychecks that month, rounded up, capped at the flat baseline so a
-// single heavy month never pushes above your consistent weekly rate.
-const TRANSFER_CAP = 834;
+// The per-month "Set this month" button applies the same cycle-wide constant rate
+// (minFlatTransfer) to that month's weeks. This is the lowest flat weekly transfer that,
+// starting from your $660 buffer, keeps the account >= $0 through January. Recomputes live.
 function monthTransferRate(y, m) {
-  let total = 0;
-  const tog = state.toggles[`${y}-${m}`] || {};
-  billsForMonth(y, m).forEach(b => {
-    if (tog[b.id] !== false) total += billAmount(y, m, b.id);
-    // paused bills in 'checking' mode still leave the account, they just aren't transferred in;
-    // an 'expense' pause means the money stays, so it isn't part of what we need to fund.
-  });
-  const pc = paychecksInMonth(y, m);
-  return pc > 0 ? Math.min(TRANSFER_CAP, Math.ceil(total / pc)) : 0;
+  return minFlatTransfer();
 }
 
-// Summarize the weekly transfers currently set for a month's paid weeks.
-// Returns { count, all: [amounts], uniform: true/false, min, max }.
 function monthWeeklyTransfers(y, m) {
   const amts = [];
   getThursdays().forEach(d => {
@@ -546,8 +544,6 @@ function applyMonthTransfer(mk, btn) {
   flashButton(btn, `✓ Set to ${money(rate)}/wk`);
 }
 
-// Snap a month's weekly transfers back down to the flat baseline (the lowest consistent
-// rate across the whole cycle). Use this to undo a per-month auto-set.
 function resetMonthTransfer(mk, btn) {
   const [y, m] = mk.split('-').map(Number);
   const rate = minFlatTransfer();
@@ -564,10 +560,8 @@ function resetMonthTransfer(mk, btn) {
   flashButton(btn, `✓ Back to ${money(rate)}/wk`);
 }
 
-// Give a button a brief confirmation state, then re-render the settings panel.
 function flashButton(btn, msg) {
   if (!btn) { renderSettings(); return; }
-  const origBg = btn.style.background;
   btn.textContent = msg;
   btn.style.background = 'var(--green)';
   btn.disabled = true;
@@ -608,7 +602,7 @@ function renderDashboard() {
   }
   const lastLabel = lastEvent
     ? `Last: ${mn[lastEvent.date.getMonth()]} ${lastEvent.date.getDate()} · ${lastEvent.type === 'paycheck' ? 'Paycheck' : (lastEvent.bill ? lastEvent.bill.name : '')}`
-    : `Starting balance · set ${mn[new Date((state.startDate||'2026-07-30')+'T00:00:00').getMonth()]} ${new Date((state.startDate||'2026-07-30')+'T00:00:00').getDate()}`;
+    : `Starting balance · set ${mn[new Date((state.startDate||'2026-08-02')+'T00:00:00').getMonth()]} ${new Date((state.startDate||'2026-08-02')+'T00:00:00').getDate()}`;
 
   let alerts = '';
   if (minBal < 0) alerts = `<div class="alert-card danger"><div class="alert-title">Account Goes Negative</div>Expense account hits ${money(minBal)} on ${fmt(minDate)}. Adjust transfers or pause a bill.</div>`;
@@ -989,14 +983,14 @@ function renderSettings() {
     </div>
     <div style="display:flex;align-items:center;gap:10px">
       <span style="font-size:13px;font-weight:600;flex:1">As of date</span>
-      <input class="add-input" type="date" id="startDate" value="${state.startDate || '2026-07-30'}" onchange="updateStart()" style="flex:0 0 auto;width:auto">
+      <input class="add-input" type="date" id="startDate" value="${state.startDate || '2026-08-02'}" onchange="updateStart()" style="flex:0 0 auto;width:auto">
     </div>
   </div></div>`;
 
-  html += `<div class="section-title">Weekly Transfer</div><p style="font-size:12px;color:var(--muted);margin-bottom:12px">One flat amount every payday. Tap below to auto-set the lowest consistent transfer that covers all bills through January. For a one-month change, use "Auto-set this month" inside that month's card — it re-sizes only that month's weeks (capped at your flat baseline). If a change reverts, tap "Reset this month to flat rate" to snap it back.</p>
-  <button class="reset-btn" style="color:var(--blue)" onclick="applyFlatTransfer(this)">Auto-set flat weekly transfer</button>`;
+  html += `<div class="section-title">Weekly Transfer</div><p style="font-size:12px;color:var(--muted);margin-bottom:12px">Your constant rate is the lowest flat weekly transfer that, starting from your $${state.startBalance ?? 660} buffer, keeps the expense account at or above $0 through January. Tap below to set every payday to it. It recomputes automatically when bills change — if you edit a bill, tap it again to lock in the new rate. Each month card also has a "Set this month" button that applies the same rate to just that month.</p>
+  <button class="reset-btn" style="color:var(--blue)" onclick="applyFlatTransfer(this)">Set constant weekly transfer (${money(minFlatTransfer())}/wk)</button>`;
 
-  html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:16px 0 8px"><span class="section-title" style="padding:0">Monthly Bills</span><button class="btn-add" onclick="addCustomBill()">+ Bill</button></div><p style="font-size:12px;color:var(--muted);margin-bottom:12px">Toggle bills on/off and set custom amounts per month. Tap Edit under any default bill to rename it or change its due date. Paused bills show red-lined in the Plan timeline. Custom bills can be recurring or one-off. After changing a price, re-run Auto-set above to fold it into your weekly transfer.</p>';
+  html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:16px 0 8px"><span class="section-title" style="padding:0">Monthly Bills</span><button class="btn-add" onclick="addCustomBill()">+ Bill</button></div><p style="font-size:12px;color:var(--muted);margin-bottom:12px">Toggle bills on/off and set custom amounts per month. Tap Edit under any default bill to rename it or change its due date. Paused bills show red-lined in the Plan timeline. Custom bills can be recurring or one-off. After changing a price, re-run the constant-rate button above to fold it into your weekly transfer.</p>';
   months.forEach(({ y, m }) => {
     const mk = `${y}-${m}`;
     if (!state.toggles[mk]) { state.toggles[mk] = {}; }
@@ -1004,33 +998,31 @@ function renderSettings() {
     let monthTotal = 0;
     monthBills.forEach(b => { if ((state.toggles[mk][b.id]) !== false) monthTotal += billAmount(y, m, b.id); });
     const isOpen = openMonths.has(mk);
-    html += `<div class="card"><div class="card-header" onclick="toggleMonthCard('${mk}', this)"><span class="card-title">${mn[m]} ${y}</span><span style="font-size:15px;font-weight:700;color:var(--green)">${money(monthTotal)}/mo</span></div><div class="card-body" style="display:${isOpen ? 'block' : 'none'}">`;
+    html += `<div class="card"><div class="card-header" onclick="toggleMonthCard('${mk}', this)"><span class="card-title">${mn[m]} ${y}</span><span style="font-size:13px;font-weight:700;color:var(--green)">${money(monthTotal)}/mo</span></div><div class="card-body" style="display:${isOpen ? 'block' : 'none'}">`;
     html += `<div class="month-total"><span>Total active bills</span><span style="color:var(--green)">${money(monthTotal)}</span></div>`;
     const wt = monthWeeklyTransfers(y, m);
-    const rate = monthTransferRate(y, m);
-    const flatRate = minFlatTransfer();
-    const offFlat = wt.count > 0 && !(wt.uniform && wt.all[0] === flatRate);
+    const rate = minFlatTransfer();
+    const offRate = wt.count > 0 && !(wt.uniform && wt.all[0] === rate);
     const curLabel = wt.count === 0 ? '—' : (wt.uniform ? `${money(wt.all[0])}/wk` : `${money(wt.min)}–${money(wt.max)}/wk`);
     html += `<div style="background:var(--card2);border-radius:var(--radius-sm);padding:12px 14px;margin:4px 0 12px">
       <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:2px">
         <span style="font-size:13px;color:var(--muted)">Weekly transfers this month</span>
-        <span style="font-size:17px;font-weight:700">${curLabel}</span>
+        <span style="font-size:17px;font-weight:700;${offRate ? 'color:var(--amber)' : ''}">${curLabel}</span>
       </div>
-      <div style="font-size:12px;color:var(--muted);margin-bottom:10px">${wt.count} paid week${wt.count === 1 ? '' : 's'}${wt.uniform ? '' : ' · varies'} · auto-set target ${money(rate)}/wk</div>
-      <button type="button" onclick="applyMonthTransfer('${mk}', this)" style="width:100%;background:var(--blue);color:#fff;border:none;border-radius:var(--radius-sm);padding:11px;font-size:15px;font-weight:600;cursor:pointer;font-family:inherit">Auto-set this month to ${money(rate)}/wk</button>
-      ${offFlat ? `<button type="button" onclick="resetMonthTransfer('${mk}', this)" style="width:100%;background:none;color:var(--muted);border:0.5px solid var(--hairline);border-radius:var(--radius-sm);padding:9px;font-size:14px;font-weight:500;cursor:pointer;font-family:inherit;margin-top:8px">Reset this month to flat rate (${money(flatRate)}/wk)</button>` : ''}
+      <div style="font-size:12px;color:var(--muted);margin-bottom:10px">${wt.count} paid week${wt.count === 1 ? '' : 's'}${wt.uniform ? '' : ' · varies'} · constant rate ${money(rate)}/wk${offRate ? ' · off rate' : ''}</div>
+      <button type="button" onclick="applyMonthTransfer('${mk}', this)" style="width:100%;background:var(--blue);color:#fff;border:none;border-radius:var(--radius-sm);padding:11px;font-size:15px;font-weight:600;cursor:pointer;font-family:inherit">Set this month to ${money(rate)}/wk</button>
     </div>`;
     monthBills.forEach(b => {
       const on = state.toggles[mk][b.id] !== false;
       const amt = billAmount(y, m, b.id);
       const isCustom = state.amounts[mk] && state.amounts[mk][b.id] !== undefined;
       const isDefault = !b.recurring && !b.month;
-      const tag = b.recurring ? ' <span style="font-size:10px;color:var(--blue)">RECURRING</span>' : (b.month ? ' <span style="font-size:10px;color:var(--amber)">ONE-OFF</span>' : '');
-      const delBtn = (b.recurring || b.month) ? ` <button class="del-btn" style="font-size:16px" onclick="delCustomBill('${b.id}')">×</button>` : '';
+      const tag = b.recurring ? ' <span style="font-size:9px;color:var(--blue)">RECURRING</span>' : (b.month ? ' <span style="font-size:9px;color:var(--amber)">ONE-OFF</span>' : '');
+      const delBtn = (b.recurring || b.month) ? ` <button class="del-btn" style="font-size:14px" onclick="delCustomBill('${b.id}')">×</button>` : '';
       const metaEdited = isDefault && state.billMeta[b.id] && (state.billMeta[b.id].name !== undefined || state.billMeta[b.id].day !== undefined);
       const ord = (n) => { const s = ['th','st','nd','rd'], v = n % 100; return n + (s[(v-20)%10] || s[v] || s[0]); };
       const sub = isDefault
-        ? `<div style="font-size:12px;color:var(--muted);margin-top:2px">Due the ${ord(b.day)}${metaEdited ? ' <span style="color:var(--amber)">· edited</span>' : ''} <button onclick="editBill('${b.id}')" style="background:none;border:none;color:var(--blue);font-size:12px;font-weight:500;cursor:pointer;padding:0 0 0 4px;font-family:inherit">Edit</button></div>`
+        ? `<div style="font-size:11px;color:var(--muted);margin-top:1px">Due the ${ord(b.day)}${metaEdited ? ' <span style="color:var(--amber)">· edited</span>' : ''} <button onclick="editBill('${b.id}')" style="background:none;border:none;color:var(--blue);font-size:11px;font-weight:600;cursor:pointer;padding:0 0 0 4px;font-family:inherit">Edit</button></div>`
         : '';
       let freed = '';
       if (!on) {
@@ -1043,12 +1035,12 @@ function renderSettings() {
       }
       html += `<div class="toggle-row">
         <span style="flex:1">
-          <span class="toggle-label">${b.name}${tag}${isCustom ? ' <span style="font-size:11px;color:var(--amber)">●</span>' : ''}${delBtn}</span>
+          <span class="toggle-label">${b.name}${tag}${isCustom ? ' <span style="font-size:10px;color:var(--amber)">●</span>' : ''}${delBtn}</span>
           ${sub}
           ${freed}
         </span>
-        <span style="font-size:14px;color:var(--muted);margin-right:6px">$</span>
-        <input class="week-input" type="number" value="${amt}" data-month="${mk}" data-bill="${b.id}" onchange="updateBillAmount(this)" style="width:72px;margin-right:10px">
+        <span style="font-size:12px;color:var(--muted);margin-right:6px">$</span>
+        <input class="week-input" type="number" value="${amt}" data-month="${mk}" data-bill="${b.id}" onchange="updateBillAmount(this)" style="width:70px;margin-right:10px">
         <button class="toggle ${on ? 'on' : ''}" data-month="${mk}" data-bill="${b.id}" onclick="toggleBill(this)"></button>
       </div>`;
     });
