@@ -193,7 +193,7 @@
 
 <div class="header">
   <h1>Budget</h1>
-  <div class="header-sub">Paid Thursdays · Expense Account · Jun 2026 – Feb 2027</div>
+  <div class="header-sub">Paid Thursdays · Expense Account · Aug 2026 – Jan 2027</div>
 </div>
 
 <div class="tabs">
@@ -217,7 +217,6 @@
 
 <script>
 const BILLS = [
-  { id: 'gym', name: 'Gym', amount: 40, day: 1 },
   { id: 'monarch', name: 'Monarch Money', amount: 15, day: 23 },
   { id: 'loan101', name: 'Loan 1-101 (2.75%)', amount: 53, day: 12 },
   { id: 'loan102', name: 'Loan 1-102 (5.50%)', amount: 83, day: 12 },
@@ -239,13 +238,13 @@ const SAVINGS_ACCOUNTS = [
   { id: 'loan101', name: 'Loan 1-101 Payoff (2.75%)', goal: 5340 }
 ];
 
-const START = new Date(2026, 5, 25);
+const START = new Date(2026, 6, 30);
 const SKIP_DATES = ['2026-12-31', '2027-01-07'];
 
 function getThursdays() {
   const dates = [];
   const d = new Date(START);
-  const end = new Date(2027, 1, 28);
+  const end = new Date(2027, 0, 31);
   while (d <= end) { dates.push(new Date(d)); d.setDate(d.getDate() + 7); }
   return dates;
 }
@@ -253,14 +252,13 @@ function fmt(d) { const m = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Se
 function fmtKey(d) { return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
 function money(n) { if (n < 0) return '-$' + Math.abs(Math.round(n)).toLocaleString(); return '$' + Math.round(n).toLocaleString(); }
 
-function loadState() { try { const s = localStorage.getItem('budget_v2'); return s ? JSON.parse(s) : null; } catch { return null; } }
-function saveState() { localStorage.setItem('budget_v2', JSON.stringify(state)); }
+function loadState() { try { const s = localStorage.getItem('budget_v3'); return s ? JSON.parse(s) : null; } catch { return null; } }
+function saveState() { localStorage.setItem('budget_v3', JSON.stringify(state)); }
 
 const defaults = {};
 getThursdays().forEach(d => {
   const key = fmtKey(d);
   if (SKIP_DATES.includes(key)) defaults[key] = 0;
-  else if (key === '2026-06-25') defaults[key] = 274;
   else defaults[key] = 838;
 });
 const defaultToggles = {};
@@ -280,8 +278,8 @@ getThursdays().forEach(d => {
 let state = loadState() || { transfers: { ...defaults }, toggles: JSON.parse(JSON.stringify(defaultToggles)), contributions: [] };
 if (!state.toggles) state.toggles = JSON.parse(JSON.stringify(defaultToggles));
 if (!state.contributions) state.contributions = [];
-if (state.startBalance === undefined) state.startBalance = 274;
-if (!state.startDate) state.startDate = '2026-06-29';
+if (state.startBalance === undefined) state.startBalance = 660;
+if (!state.startDate) state.startDate = '2026-07-30';
 if (!state.amounts) state.amounts = {};
 if (!state.customGoals) state.customGoals = [];
 if (!state.customBills) state.customBills = [];
@@ -291,29 +289,9 @@ if (!state.billMeta) state.billMeta = {};
 if (!state.pauseMode) state.pauseMode = {};
 if (!state.pausedWeeks) state.pausedWeeks = {};
 
-if (!state.migratedFlexPause) {
-  Object.keys(state.toggles || {}).forEach(mk => {
-    if (mk === '2026-11') return;
-    ['roth', 'brokerage', 'extra103'].forEach(bid => {
-      if (state.toggles[mk] && state.toggles[mk][bid] === false) {
-        state.toggles[mk][bid] = true;
-      }
-    });
-  });
-  state.migratedFlexPause = true;
-  saveState();
-}
-
-if (!state.migratedSkipDates) {
-  getThursdays().forEach(d => {
-    const k = fmtKey(d);
-    if (!SKIP_DATES.includes(k) && k !== '2026-06-25' && state.transfers[k] === 0) {
-      state.transfers[k] = 838;
-    }
-  });
-  state.migratedSkipDates = true;
-  saveState();
-}
+// One-time migration: if a change lowers/raises a bill, weeks left at the old flat 838
+// don't need touching — the transfer is driven live from state.transfers. Nothing to migrate
+// on the fresh v3 store.
 
 const FLEX_BILLS = ['extra103', 'roth', 'brokerage'];
 let openWeeks = new Set();
@@ -408,7 +386,7 @@ function simulate() {
   const thursdays = getThursdays();
   const events = [];
   let balance = state.startBalance || 0;
-  const startD = new Date((state.startDate || '2026-06-29') + 'T00:00:00');
+  const startD = new Date((state.startDate || '2026-07-30') + 'T00:00:00');
   const months = new Set();
   thursdays.forEach(d => {
     const key = fmtKey(d);
@@ -455,6 +433,95 @@ function findCurrentWeek() {
   return 0;
 }
 
+// Minimum flat weekly transfer that keeps the expense account at or above $0 through the
+// end of the plan, given the current bills, start balance, pauses and skips.
+function minFlatTransfer() {
+  const thursdays = getThursdays();
+  const startD = new Date((state.startDate || '2026-07-30') + 'T00:00:00');
+  const billEvents = [];
+  const months = new Set();
+  thursdays.forEach(d => months.add(`${d.getFullYear()}-${d.getMonth()}`));
+  months.forEach(mk => {
+    const [y, m] = mk.split('-').map(Number);
+    getMonthBills(y, m).forEach(b => {
+      billEvents.push({ date: new Date(y, m, b.day), amount: -b.amount });
+    });
+  });
+  const lowest = (rate) => {
+    const evs = [];
+    thursdays.forEach(d => {
+      const k = fmtKey(d);
+      if (SKIP_DATES.includes(k) || state.pausedWeeks[k]) { evs.push({ date: new Date(d), amount: 0 }); return; }
+      let t = rate;
+      const y = d.getFullYear(), m = d.getMonth(), mk = `${y}-${m}`;
+      const tog = state.toggles[mk] || {};
+      const skipped = state.skips[k] || [];
+      FLEX_BILLS.forEach(bid => { if (skipped.includes(bid)) t -= weekSlice(y, m, bid); });
+      billsForMonth(y, m).forEach(b => {
+        if (tog[b.id] === false && pauseModeFor(mk, b.id) === 'checking') {
+          if (FLEX_BILLS.includes(b.id) && skipped.includes(b.id)) return;
+          t -= weekSlice(y, m, b.id);
+        }
+      });
+      evs.push({ date: new Date(d), amount: Math.max(0, t) });
+    });
+    billEvents.forEach(e => evs.push({ date: e.date, amount: e.amount }));
+    evs.sort((a, b) => a.date - b.date);
+    let bal = state.startBalance || 0, min = bal;
+    evs.forEach(e => { if (e.date < startD) return; bal += e.amount; if (bal < min) min = bal; });
+    return min;
+  };
+  let lo = 0, hi = 1038;
+  if (lowest(hi) < 0) return hi;
+  for (let i = 0; i < 24; i++) {
+    const mid = (lo + hi) / 2;
+    if (lowest(mid) >= 0) hi = mid; else lo = mid;
+  }
+  return Math.min(1038, Math.ceil(hi));
+}
+
+function applyFlatTransfer() {
+  const rate = minFlatTransfer();
+  getThursdays().forEach(d => {
+    const k = fmtKey(d);
+    if (!SKIP_DATES.includes(k)) state.transfers[k] = rate;
+  });
+  saveState();
+  renderDashboard();
+  renderProjection();
+  renderWeeks();
+  renderSettings();
+  alert('Flat weekly transfer set to $' + rate + ' — the lowest consistent amount that keeps your account at or above $0 through January.');
+}
+
+// Size ONE month's weekly transfers to just that month's active bills, spread over its
+// paychecks. Other months are untouched, so a one-month blip snaps back automatically.
+function monthTransferRate(y, m) {
+  let total = 0;
+  const tog = state.toggles[`${y}-${m}`] || {};
+  billsForMonth(y, m).forEach(b => {
+    if (tog[b.id] !== false) total += billAmount(y, m, b.id);
+  });
+  const pc = paychecksInMonth(y, m);
+  return pc > 0 ? Math.min(1038, Math.ceil(total / pc)) : 0;
+}
+
+function applyMonthTransfer(mk) {
+  const [y, m] = mk.split('-').map(Number);
+  const rate = monthTransferRate(y, m);
+  getThursdays().forEach(d => {
+    if (d.getFullYear() !== y || d.getMonth() !== m) return;
+    const k = fmtKey(d);
+    if (!SKIP_DATES.includes(k)) state.transfers[k] = rate;
+  });
+  openMonths.add(mk);
+  saveState();
+  renderDashboard();
+  renderProjection();
+  renderWeeks();
+  renderSettings();
+}
+
 function renderDashboard() {
   const el = document.getElementById('dashboard');
   const sim = simulate();
@@ -485,15 +552,15 @@ function renderDashboard() {
     const sign = nextEvent.amount >= 0 ? '+' : '';
     nextLabel = `Next: ${mn[nextEvent.date.getMonth()]} ${nextEvent.date.getDate()} · ${lab} (${sign}${money(nextEvent.amount)})`;
   } else {
-    nextLabel = 'Plan complete through Feb 2027';
+    nextLabel = 'Plan complete through Jan 2027';
   }
   const lastLabel = lastEvent
     ? `Last: ${mn[lastEvent.date.getMonth()]} ${lastEvent.date.getDate()} · ${lastEvent.type === 'paycheck' ? 'Paycheck' : (lastEvent.bill ? lastEvent.bill.name : '')}`
-    : `Starting balance · set ${mn[new Date((state.startDate||'2026-06-29')+'T00:00:00').getMonth()]} ${new Date((state.startDate||'2026-06-29')+'T00:00:00').getDate()}`;
+    : `Starting balance · set ${mn[new Date((state.startDate||'2026-07-30')+'T00:00:00').getMonth()]} ${new Date((state.startDate||'2026-07-30')+'T00:00:00').getDate()}`;
 
   let alerts = '';
   if (minBal < 0) alerts = `<div class="alert-card danger"><div class="alert-title">Account Goes Negative</div>Expense account hits ${money(minBal)} on ${fmt(minDate)}. Adjust transfers or pause a bill.</div>`;
-  else alerts = `<div class="alert-card ok"><div class="alert-title">All Clear</div>Expense account stays at or above $0 through Feb 2027.</div>`;
+  else alerts = `<div class="alert-card ok"><div class="alert-title">All Clear</div>Expense account stays at or above $0 through Jan 2027.</div>`;
 
   let savHtml = '';
   allSavingsAccounts().forEach(a => {
@@ -859,22 +926,25 @@ function renderSettings() {
   const el = document.getElementById('settings');
   const mn = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   const months = [];
-  for (let m = 6; m <= 11; m++) months.push({ y: 2026, m });
-  for (let m = 0; m <= 1; m++) months.push({ y: 2027, m });
-  let html = '<div class="section-title">Starting Balance</div><p style="font-size:13px;color:var(--muted);margin-bottom:12px;padding:0 6px">What\'s actually in your expense account, and the date that reflects. The projection builds forward from here. Events before this date are excluded (already paid).</p>';
+  for (let m = 7; m <= 11; m++) months.push({ y: 2026, m });
+  months.push({ y: 2027, m: 0 });
+  let html = '<div class="section-title">Starting Balance</div><p style="font-size:12px;color:var(--muted);margin-bottom:12px">What\'s actually in your expense account, and the date that reflects. The projection builds forward from here. Events before this date are excluded (already paid).</p>';
   html += `<div class="card"><div style="padding:14px 16px">
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
-      <span style="font-size:15px;font-weight:600;flex:1">Balance today</span>
-      <span style="font-size:15px;color:var(--muted)">$</span>
-      <input class="week-input" type="number" id="startBal" value="${state.startBalance ?? 274}" onchange="updateStart()" style="width:100px">
+      <span style="font-size:13px;font-weight:600;flex:1">Balance today</span>
+      <span style="font-size:14px;color:var(--muted)">$</span>
+      <input class="week-input" type="number" id="startBal" value="${state.startBalance ?? 660}" onchange="updateStart()" style="width:100px">
     </div>
     <div style="display:flex;align-items:center;gap:10px">
-      <span style="font-size:15px;font-weight:600;flex:1">As of date</span>
-      <input class="add-input" type="date" id="startDate" value="${state.startDate || '2026-06-29'}" onchange="updateStart()" style="flex:0 0 auto;width:auto">
+      <span style="font-size:13px;font-weight:600;flex:1">As of date</span>
+      <input class="add-input" type="date" id="startDate" value="${state.startDate || '2026-07-30'}" onchange="updateStart()" style="flex:0 0 auto;width:auto">
     </div>
   </div></div>`;
 
-  html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:18px 6px 7px"><span class="section-title" style="padding:0">Monthly Bills</span><button class="btn-add" onclick="addCustomBill()">+ Bill</button></div><p style="font-size:13px;color:var(--muted);margin-bottom:12px;padding:0 6px">Toggle bills on/off and set custom amounts per month. Bills are ordered by due date. Pausing any bill lets you send the freed cash to checking or leave it in the expense account. Tap Edit under any default bill to rename it or change its due date. Paused bills show red-lined in the Plan timeline. Custom bills can be recurring or one-off.</p>';
+  html += `<div class="section-title">Weekly Transfer</div><p style="font-size:12px;color:var(--muted);margin-bottom:12px">One flat amount every payday. Tap below to auto-set the lowest consistent transfer that covers all bills through January. For a one-month change that snaps back after, use "Auto-set month" inside that month's card instead — it only re-sizes that month's weeks.</p>
+  <button class="reset-btn" style="color:var(--blue)" onclick="applyFlatTransfer()">Auto-set flat weekly transfer</button>`;
+
+  html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:16px 0 8px"><span class="section-title" style="padding:0">Monthly Bills</span><button class="btn-add" onclick="addCustomBill()">+ Bill</button></div><p style="font-size:12px;color:var(--muted);margin-bottom:12px">Toggle bills on/off and set custom amounts per month. Tap Edit under any default bill to rename it or change its due date. Paused bills show red-lined in the Plan timeline. Custom bills can be recurring or one-off. After changing a price, re-run Auto-set above to fold it into your weekly transfer.</p>';
   months.forEach(({ y, m }) => {
     const mk = `${y}-${m}`;
     if (!state.toggles[mk]) { state.toggles[mk] = {}; }
@@ -884,6 +954,7 @@ function renderSettings() {
     const isOpen = openMonths.has(mk);
     html += `<div class="card"><div class="card-header" onclick="toggleMonthCard('${mk}', this)"><span class="card-title">${mn[m]} ${y}</span><span style="font-size:15px;font-weight:700;color:var(--green)">${money(monthTotal)}/mo</span></div><div class="card-body" style="display:${isOpen ? 'block' : 'none'}">`;
     html += `<div class="month-total"><span>Total active bills</span><span style="color:var(--green)">${money(monthTotal)}</span></div>`;
+    html += `<div style="display:flex;align-items:center;justify-content:space-between;padding:2px 0 10px"><span style="font-size:12px;color:var(--muted)">Set just this month's weekly transfer to ${money(monthTransferRate(y, m))}/wk</span><button onclick="applyMonthTransfer('${mk}')" style="background:none;border:none;color:var(--blue);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;padding:2px 4px">Auto-set month</button></div>`;
     monthBills.forEach(b => {
       const on = state.toggles[mk][b.id] !== false;
       const amt = billAmount(y, m, b.id);
