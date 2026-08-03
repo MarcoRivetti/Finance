@@ -468,7 +468,7 @@ function minFlatTransfer() {
     return min;
   };
   let lo = 0, hi = 1038;
-  if (lowest(hi) < 0) return hi;
+  if (lowest(hi) < 0) return hi; // even max can't cover; return the cap
   for (let i = 0; i < 24; i++) {
     const mid = (lo + hi) / 2;
     if (lowest(mid) >= 0) hi = mid; else lo = mid;
@@ -476,7 +476,7 @@ function minFlatTransfer() {
   return Math.min(1038, Math.ceil(hi));
 }
 
-function applyFlatTransfer() {
+function applyFlatTransfer(btn) {
   const rate = minFlatTransfer();
   getThursdays().forEach(d => {
     const k = fmtKey(d);
@@ -486,21 +486,34 @@ function applyFlatTransfer() {
   renderDashboard();
   renderProjection();
   renderWeeks();
-  renderSettings();
-  alert('Flat weekly transfer set to $' + rate + ' — the lowest consistent amount that keeps your account at or above $0 through January.');
+  flashFlatButton(btn, `✓ Flat rate set to ${money(rate)}/wk`);
+}
+
+// Confirmation flash for the flat-transfer button (a .reset-btn), then re-render settings.
+function flashFlatButton(btn, msg) {
+  if (!btn) { renderSettings(); return; }
+  btn.textContent = msg;
+  btn.style.color = '#fff';
+  btn.style.background = 'var(--green)';
+  btn.disabled = true;
+  setTimeout(() => { renderSettings(); }, 900);
 }
 
 // Size ONE month's weekly transfers to just that month's active bills, spread over its
 // paychecks. Other months are untouched, so a one-month blip snaps back automatically.
-// active-bill total ÷ paychecks that month, rounded up, capped at 1038.
+// active-bill total ÷ paychecks that month, rounded up, capped at the flat baseline so a
+// single heavy month never pushes above your consistent weekly rate.
+const TRANSFER_CAP = 834;
 function monthTransferRate(y, m) {
   let total = 0;
   const tog = state.toggles[`${y}-${m}`] || {};
   billsForMonth(y, m).forEach(b => {
     if (tog[b.id] !== false) total += billAmount(y, m, b.id);
+    // paused bills in 'checking' mode still leave the account, they just aren't transferred in;
+    // an 'expense' pause means the money stays, so it isn't part of what we need to fund.
   });
   const pc = paychecksInMonth(y, m);
-  return pc > 0 ? Math.min(1038, Math.ceil(total / pc)) : 0;
+  return pc > 0 ? Math.min(TRANSFER_CAP, Math.ceil(total / pc)) : 0;
 }
 
 // Summarize the weekly transfers currently set for a month's paid weeks.
@@ -517,7 +530,7 @@ function monthWeeklyTransfers(y, m) {
   return { count: amts.length, all: amts, uniform, min: Math.min(...amts), max: Math.max(...amts) };
 }
 
-function applyMonthTransfer(mk) {
+function applyMonthTransfer(mk, btn) {
   const [y, m] = mk.split('-').map(Number);
   const rate = monthTransferRate(y, m);
   getThursdays().forEach(d => {
@@ -530,7 +543,35 @@ function applyMonthTransfer(mk) {
   renderDashboard();
   renderProjection();
   renderWeeks();
-  renderSettings();
+  flashButton(btn, `✓ Set to ${money(rate)}/wk`);
+}
+
+// Snap a month's weekly transfers back down to the flat baseline (the lowest consistent
+// rate across the whole cycle). Use this to undo a per-month auto-set.
+function resetMonthTransfer(mk, btn) {
+  const [y, m] = mk.split('-').map(Number);
+  const rate = minFlatTransfer();
+  getThursdays().forEach(d => {
+    if (d.getFullYear() !== y || d.getMonth() !== m) return;
+    const k = fmtKey(d);
+    if (!SKIP_DATES.includes(k)) state.transfers[k] = rate;
+  });
+  openMonths.add(mk);
+  saveState();
+  renderDashboard();
+  renderProjection();
+  renderWeeks();
+  flashButton(btn, `✓ Back to ${money(rate)}/wk`);
+}
+
+// Give a button a brief confirmation state, then re-render the settings panel.
+function flashButton(btn, msg) {
+  if (!btn) { renderSettings(); return; }
+  const origBg = btn.style.background;
+  btn.textContent = msg;
+  btn.style.background = 'var(--green)';
+  btn.disabled = true;
+  setTimeout(() => { renderSettings(); }, 850);
 }
 
 function renderDashboard() {
@@ -952,8 +993,8 @@ function renderSettings() {
     </div>
   </div></div>`;
 
-  html += `<div class="section-title">Weekly Transfer</div><p style="font-size:12px;color:var(--muted);margin-bottom:12px">One flat amount every payday. Tap below to auto-set the lowest consistent transfer that covers all bills through January. For a one-month change that snaps back after, use "Auto-set month" inside that month's card instead — it only re-sizes that month's weeks.</p>
-  <button class="reset-btn" style="color:var(--blue)" onclick="applyFlatTransfer()">Auto-set flat weekly transfer</button>`;
+  html += `<div class="section-title">Weekly Transfer</div><p style="font-size:12px;color:var(--muted);margin-bottom:12px">One flat amount every payday. Tap below to auto-set the lowest consistent transfer that covers all bills through January. For a one-month change, use "Auto-set this month" inside that month's card — it re-sizes only that month's weeks (capped at your flat baseline). If a change reverts, tap "Reset this month to flat rate" to snap it back.</p>
+  <button class="reset-btn" style="color:var(--blue)" onclick="applyFlatTransfer(this)">Auto-set flat weekly transfer</button>`;
 
   html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:16px 0 8px"><span class="section-title" style="padding:0">Monthly Bills</span><button class="btn-add" onclick="addCustomBill()">+ Bill</button></div><p style="font-size:12px;color:var(--muted);margin-bottom:12px">Toggle bills on/off and set custom amounts per month. Tap Edit under any default bill to rename it or change its due date. Paused bills show red-lined in the Plan timeline. Custom bills can be recurring or one-off. After changing a price, re-run Auto-set above to fold it into your weekly transfer.</p>';
   months.forEach(({ y, m }) => {
@@ -967,6 +1008,8 @@ function renderSettings() {
     html += `<div class="month-total"><span>Total active bills</span><span style="color:var(--green)">${money(monthTotal)}</span></div>`;
     const wt = monthWeeklyTransfers(y, m);
     const rate = monthTransferRate(y, m);
+    const flatRate = minFlatTransfer();
+    const offFlat = wt.count > 0 && !(wt.uniform && wt.all[0] === flatRate);
     const curLabel = wt.count === 0 ? '—' : (wt.uniform ? `${money(wt.all[0])}/wk` : `${money(wt.min)}–${money(wt.max)}/wk`);
     html += `<div style="background:var(--card2);border-radius:var(--radius-sm);padding:12px 14px;margin:4px 0 12px">
       <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:2px">
@@ -974,7 +1017,8 @@ function renderSettings() {
         <span style="font-size:17px;font-weight:700">${curLabel}</span>
       </div>
       <div style="font-size:12px;color:var(--muted);margin-bottom:10px">${wt.count} paid week${wt.count === 1 ? '' : 's'}${wt.uniform ? '' : ' · varies'} · auto-set target ${money(rate)}/wk</div>
-      <button type="button" onclick="applyMonthTransfer('${mk}')" style="width:100%;background:var(--blue);color:#fff;border:none;border-radius:var(--radius-sm);padding:11px;font-size:15px;font-weight:600;cursor:pointer;font-family:inherit">Auto-set this month to ${money(rate)}/wk</button>
+      <button type="button" onclick="applyMonthTransfer('${mk}', this)" style="width:100%;background:var(--blue);color:#fff;border:none;border-radius:var(--radius-sm);padding:11px;font-size:15px;font-weight:600;cursor:pointer;font-family:inherit">Auto-set this month to ${money(rate)}/wk</button>
+      ${offFlat ? `<button type="button" onclick="resetMonthTransfer('${mk}', this)" style="width:100%;background:none;color:var(--muted);border:0.5px solid var(--hairline);border-radius:var(--radius-sm);padding:9px;font-size:14px;font-weight:500;cursor:pointer;font-family:inherit;margin-top:8px">Reset this month to flat rate (${money(flatRate)}/wk)</button>` : ''}
     </div>`;
     monthBills.forEach(b => {
       const on = state.toggles[mk][b.id] !== false;
