@@ -12,21 +12,21 @@
   <title>Budget Tracker</title>
   <style>
     :root {
-      --bg: #000000;               /* iOS dark systemBackground */
-      --card: #1c1c1e;             /* secondarySystemGroupedBackground (dark) */
-      --card2: #2c2c2e;            /* tertiary surface */
-      --ink: #f2f2f0;              /* off-white label */
-      --muted: #98989f;            /* secondaryLabel (dark) */
-      --muted2: #5a5a5f;           /* systemGray (dark) */
+      --bg: #000000;
+      --card: #1c1c1e;
+      --card2: #2c2c2e;
+      --ink: #f2f2f0;
+      --muted: #98989f;
+      --muted2: #5a5a5f;
       --border: #2c2c2e;
-      --hairline: rgba(120,120,128,0.32); /* separator (dark) */
-      --green: #30d158;            /* systemGreen (dark) */
+      --hairline: rgba(120,120,128,0.32);
+      --green: #30d158;
       --green-bg: #10331d;
-      --red: #ff453a;              /* systemRed (dark) */
+      --red: #ff453a;
       --red-bg: #3a1512;
-      --amber: #ff9f0a;            /* systemOrange (dark) */
+      --amber: #ff9f0a;
       --amber-bg: #3a2708;
-      --blue: #0a84ff;             /* systemBlue (dark) */
+      --blue: #0a84ff;
       --blue-bg: #0a2540;
       --radius: 16px;
       --radius-sm: 11px;
@@ -311,36 +311,18 @@ if (!state.customBills) state.customBills = [];
 if (!state.skips) state.skips = {};
 if (!state.done) state.done = {};
 if (!state.billMeta) state.billMeta = {};
-// Per-month, per-flex-bill: where the freed cash goes when paused.
-// 'checking' (default) reduces transfers so the money stays in checking (balance flat).
-// 'expense' keeps transfers full so the money stays in the expense account (balance rises).
 if (!state.pauseMode) state.pauseMode = {};
-// Weeks the user has paused (transfer forced to $0). Stores the pre-pause amount to restore.
 if (!state.pausedWeeks) state.pausedWeeks = {};
-// Bulk base-price overrides per bill id (applies to every month unless a scheduled change or
-// a per-month amount overrides it). Set from the Prices tab's bulk editor.
 if (!state.basePrices) state.basePrices = {};
-// Scheduled price changes: [{ id, billId, amount, from: 'YYYY-M' }]. From that month onward
-// the bill uses `amount` (the latest change on/before a given month wins).
 if (!state.scheduledChanges) state.scheduledChanges = [];
-// One-time cash injections into the expense account: [{ id, amount, date:'YYYY-MM-DD', note }].
-// These post on their date and lift the running balance (and lower the needed transfer).
 if (!state.injections) state.injections = [];
-// Default bill ids the user has removed from the plan (restorable). Custom bills are deleted outright.
 if (!state.deletedBills) state.deletedBills = [];
-// One-time fix: the old start date (Jul 30) fell ON the first paycheck, so that transfer
-// counted on top of the $660 buffer (balance looked doubled). Anchor to Aug 2 — the date
-// you actually have $660 — which excludes the Jul 30 paycheck as already-happened.
 if (!state.migratedStartAug2) {
   state.startBalance = 660;
   state.startDate = '2026-08-02';
   state.migratedStartAug2 = true;
   try { localStorage.setItem('budget_v3', JSON.stringify(state)); } catch {}
 }
-
-// One-time migration: if a change lowers/raises a bill, weeks left at the old flat 838
-// don't need touching — the transfer is driven live from state.transfers. Nothing to migrate
-// on the fresh v3 store.
 
 const FLEX_BILLS = ['extra103', 'roth', 'brokerage'];
 let openWeeks = new Set();
@@ -367,15 +349,9 @@ function paychecksInMonth(year, month) {
   return getThursdays().filter(d => d.getFullYear() === year && d.getMonth() === month && !SKIP_DATES.includes(fmtKey(d))).length;
 }
 
-// Resolve a bill's base amount for a given month. Priority (highest first):
-//  1. per-month manual override (state.amounts) — set on a single month's card
-//  2. scheduled price change effective on/before this month (latest one wins)
-//  3. bulk base-price override (state.basePrices) — set in the Prices tab
-//  4. the hardcoded default in BILLS
 function baseBillAmount(year, month, billId) {
   const mk = `${year}-${month}`;
   if (state.amounts[mk] && state.amounts[mk][billId] !== undefined) return state.amounts[mk][billId];
-  // Scheduled changes: pick the latest whose effective month is <= this month.
   const sched = state.scheduledChanges
     .filter(s => s.billId === billId)
     .map(s => { const [sy, sm] = s.from.split('-').map(Number); return { ...s, ord: sy * 12 + sm }; })
@@ -409,7 +385,6 @@ function billAmount(year, month, billId) {
 
 function pauseModeFor(mk, billId) {
   if (state.pauseMode[mk] && state.pauseMode[mk][billId]) return state.pauseMode[mk][billId];
-  // Flex bills historically freed cash to checking; other bills default to staying in the account.
   return FLEX_BILLS.includes(billId) ? 'checking' : 'expense';
 }
 
@@ -421,15 +396,11 @@ function effectiveTransfer(d) {
   const mk = `${y}-${m}`;
   const tog = state.toggles[mk] || {};
   const skipped = state.skips[k] || [];
-  // Flexible bills can be skipped for a single week (always frees that slice to checking).
   FLEX_BILLS.forEach(billId => {
     if (skipped.includes(billId)) t -= weekSlice(y, m, billId);
   });
-  // Any bill paused for the whole month can send its freed cash to checking (reduce transfer)
-  // or leave it in the expense account (transfer unchanged), per its pause mode.
   billsForMonth(y, m).forEach(b => {
     if (tog[b.id] === false && pauseModeFor(mk, b.id) === 'checking') {
-      // Don't double-count a flex bill already handled via a weekly skip this week.
       if (FLEX_BILLS.includes(b.id) && skipped.includes(b.id)) return;
       t -= weekSlice(y, m, b.id);
     }
@@ -467,8 +438,6 @@ function simulate() {
     const [y, m] = mk.split('-').map(Number);
     getMonthBills(y, m).forEach(b => {
       const dueDate = new Date(y, m, b.day);
-      // If this bill is checked off (paid) and its due date is still in the future,
-      // treat it as posting today so the live balance reflects the early payment.
       const ek = `${fmtKey(dueDate)}|${b.id}`;
       let postDate = dueDate;
       let paidEarly = false;
@@ -485,7 +454,6 @@ function simulate() {
   events.sort((a, b) => {
     const diff = a.date - b.date;
     if (diff !== 0) return diff;
-    // Money-in (paychecks, injections) posts before bills on the same day.
     const inA = a.type === 'paycheck' || a.type === 'injection';
     const inB = b.type === 'paycheck' || b.type === 'injection';
     if (inA && b.type === 'bill') return -1;
@@ -495,7 +463,7 @@ function simulate() {
   const result = [];
   events.forEach(e => {
     if (e.skip) return;
-    if (e.date < startD) return; // already-happened events excluded; balance starts at startBalance
+    if (e.date < startD) return;
     balance += e.amount;
     result.push({ ...e, balance });
   });
@@ -1325,4 +1293,257 @@ function renderSettings() {
       if (!base) return;
       const meta = state.billMeta[id];
       const nm = meta && meta.name !== undefined ? meta.name : base.name;
-      html +=
+      html += `<div class="toggle-row">
+        <span style="flex:1"><span class="toggle-label" style="color:var(--muted);text-decoration:line-through">${nm}</span></span>
+        <button class="btn-add" onclick="restoreBill('${id}')">Restore</button>
+      </div>`;
+    });
+    html += '</div></div>';
+  }
+  html += `<div class="section-title" style="margin-top:20px">Data</div>
+    <button class="reset-btn" onclick="if(confirm('Reset transfers, toggles, custom amounts, custom bills, bill name/date edits, bulk prices, scheduled changes, cash injections, removed bills, pause settings, paused weeks, and weekly skips? Your savings goals and logged contributions will be kept.')){state.transfers={...defaults};state.toggles=JSON.parse(JSON.stringify(defaultToggles));state.amounts={};state.customBills=[];state.skips={};state.billMeta={};state.basePrices={};state.scheduledChanges=[];state.injections=[];state.deletedBills=[];state.pauseMode={};state.pausedWeeks={};saveState();renderDashboard();renderProjection();renderSettings();alert('Reset done.');}">Reset Plan to Defaults</button>
+    <button class="reset-btn" onclick="if(confirm('Delete ALL logged savings contributions? This cannot be undone.')){state.contributions=[];saveState();renderDashboard();renderSavings();alert('Contributions cleared.');}">Clear All Contributions</button>`;
+  el.innerHTML = html;
+}
+
+function updateTransfer(input) {
+  state.transfers[input.dataset.key] = Math.max(0, Math.min(1038, parseInt(input.value) || 0));
+  saveState();
+  renderDashboard();
+  renderProjection();
+  renderWeeks();
+}
+function updateStart() {
+  const bal = parseFloat(document.getElementById('startBal').value);
+  const dt = document.getElementById('startDate').value;
+  if (!isNaN(bal)) state.startBalance = bal;
+  if (dt) state.startDate = dt;
+  saveState();
+  renderDashboard();
+  renderProjection();
+}
+function toggleBill(btn) {
+  const mk = btn.dataset.month, bid = btn.dataset.bill;
+  if (!state.toggles[mk]) state.toggles[mk] = {};
+  state.toggles[mk][bid] = state.toggles[mk][bid] === false ? true : false;
+  btn.classList.toggle('on');
+  openMonths.add(mk);
+  saveState();
+  renderDashboard();
+  renderProjection();
+  renderWeeks();
+  renderSettings();
+}
+function toggleMonthCard(mk, headerEl) {
+  if (openMonths.has(mk)) openMonths.delete(mk);
+  else openMonths.add(mk);
+  const body = headerEl.nextElementSibling;
+  body.style.display = openMonths.has(mk) ? 'block' : 'none';
+}
+function setPauseMode(mk, bid, mode) {
+  if (!state.pauseMode[mk]) state.pauseMode[mk] = {};
+  state.pauseMode[mk][bid] = mode;
+  openMonths.add(mk);
+  saveState();
+  renderDashboard();
+  renderProjection();
+  renderWeeks();
+  renderSettings();
+}
+function editBill(billId) {
+  const base = BILLS.find(b => b.id === billId);
+  if (!base) return;
+  const meta = state.billMeta[billId] || {};
+  const curName = meta.name !== undefined ? meta.name : base.name;
+  const curDay = meta.day !== undefined ? meta.day : base.day;
+  const newName = prompt('Bill name:', curName);
+  if (newName === null) return;
+  const dayRaw = prompt('Day of month it\'s due (1-28):', String(curDay));
+  if (dayRaw === null) return;
+  let day = parseInt(dayRaw);
+  if (isNaN(day) || day < 1) day = 1;
+  if (day > 28) day = 28;
+  if (!state.billMeta[billId]) state.billMeta[billId] = {};
+  const nm = newName.trim();
+  if (nm === '' || nm === base.name) delete state.billMeta[billId].name;
+  else state.billMeta[billId].name = nm;
+  if (day === base.day) delete state.billMeta[billId].day;
+  else state.billMeta[billId].day = day;
+  if (Object.keys(state.billMeta[billId]).length === 0) delete state.billMeta[billId];
+  saveState();
+  renderDashboard();
+  renderProjection();
+  renderSettings();
+}
+// --- Modal helpers ---
+function openModal(innerHtml) {
+  const ov = document.getElementById('modalOverlay');
+  ov.innerHTML = `<div class="modal">${innerHtml}</div>`;
+  ov.style.display = 'flex';
+}
+function closeModal() {
+  const ov = document.getElementById('modalOverlay');
+  ov.style.display = 'none';
+  ov.innerHTML = '';
+}
+
+// Single-popup Add Bill form. Uses a native month picker so the date can't be misread.
+function addCustomBill() {
+  openModal(`
+    <div class="modal-title">Add Bill</div>
+    <label class="modal-label">Name</label>
+    <input class="modal-input" id="mb-name" placeholder="e.g. Phone" autofocus>
+    <label class="modal-label">Amount ($)</label>
+    <input class="modal-input" id="mb-amount" type="number" inputmode="decimal" placeholder="0">
+    <label class="modal-label">Due day of month (1–28)</label>
+    <input class="modal-input" id="mb-day" type="number" min="1" max="28" placeholder="1">
+    <label class="modal-label">Frequency</label>
+    <select class="modal-input" id="mb-freq" onchange="document.getElementById('mb-month-wrap').style.display = this.value === 'once' ? 'block' : 'none'">
+      <option value="recurring">Recurring — every month</option>
+      <option value="once">One-off — a single month</option>
+    </select>
+    <div id="mb-month-wrap" style="display:none">
+      <label class="modal-label">Which month</label>
+      <input class="modal-input" id="mb-month" type="month" value="2026-09" min="2026-08" max="2027-01">
+    </div>
+    <div class="modal-actions">
+      <button class="modal-btn primary" onclick="submitBillForm()">Add Bill</button>
+      <button class="modal-btn ghost" onclick="closeModal()">Cancel</button>
+    </div>
+  `);
+}
+
+function submitBillForm() {
+  const name = document.getElementById('mb-name').value.trim();
+  const amount = parseFloat(document.getElementById('mb-amount').value);
+  let day = parseInt(document.getElementById('mb-day').value);
+  const freq = document.getElementById('mb-freq').value;
+  if (!name) { alert('Please enter a name.'); return; }
+  if (isNaN(amount)) { alert('Please enter a valid amount.'); return; }
+  if (isNaN(day) || day < 1) day = 1;
+  if (day > 28) day = 28;
+  const recurring = freq === 'recurring';
+  const bill = { id: 'cb' + Date.now() + Math.random().toString(36).slice(2,6), name, amount, day, recurring };
+  if (!recurring) {
+    const mv = document.getElementById('mb-month').value; // "YYYY-MM", month is 1-based
+    if (!mv) { alert('Please pick a month.'); return; }
+    const [yr, mo] = mv.split('-').map(Number);
+    bill.month = `${yr}-${mo - 1}`; // store 0-based month index
+  }
+  state.customBills.push(bill);
+  saveState();
+  closeModal();
+  applyConstantRate();
+}
+
+// --- Cash injections: one-time deposits into the expense account ---
+function addInjection() {
+  openModal(`
+    <div class="modal-title">Add Cash Injection</div>
+    <div style="font-size:12px;color:var(--muted);margin-top:2px">A one-time deposit into the expense account. It lifts the balance on its date and lowers the transfer you need.</div>
+    <label class="modal-label">Amount ($)</label>
+    <input class="modal-input" id="ci-amount" type="number" inputmode="decimal" placeholder="0" autofocus>
+    <label class="modal-label">Date received</label>
+    <input class="modal-input" id="ci-date" type="date" value="${fmtKey(new Date())}">
+    <label class="modal-label">Note (optional)</label>
+    <input class="modal-input" id="ci-note" placeholder="e.g. Tax refund">
+    <div class="modal-actions">
+      <button class="modal-btn primary" onclick="submitInjection()">Add Injection</button>
+      <button class="modal-btn ghost" onclick="closeModal()">Cancel</button>
+    </div>
+  `);
+}
+
+function submitInjection() {
+  const amount = parseFloat(document.getElementById('ci-amount').value);
+  const date = document.getElementById('ci-date').value;
+  const note = document.getElementById('ci-note').value.trim();
+  if (isNaN(amount) || amount === 0) { alert('Please enter an amount.'); return; }
+  if (!date) { alert('Please pick a date.'); return; }
+  state.injections.push({ id: 'inj' + Date.now() + Math.random().toString(36).slice(2,6), amount, date, note });
+  saveState();
+  closeModal();
+  renderDashboard();
+  renderProjection();
+  renderSettings();
+}
+
+function delInjection(id) {
+  if (!confirm('Delete this cash injection?')) return;
+  state.injections = state.injections.filter(i => i.id !== id);
+  saveState();
+  renderDashboard();
+  renderProjection();
+  renderSettings();
+}
+
+function delCustomBill(id) {
+  if (!confirm('Delete this custom bill?')) return;
+  state.customBills = state.customBills.filter(b => b.id !== id);
+  saveState();
+  applyConstantRate();
+}
+
+// Remove a built-in (default) bill from the plan. It can be restored later.
+function deleteDefaultBill(id) {
+  if (!confirm('Remove this bill from the plan? You can restore it later from the bottom of More.')) return;
+  if (!state.deletedBills.includes(id)) state.deletedBills.push(id);
+  saveState();
+  applyConstantRate();
+}
+
+function restoreBill(id) {
+  state.deletedBills = state.deletedBills.filter(x => x !== id);
+  saveState();
+  applyConstantRate();
+}
+
+// Recompute the constant weekly transfer and write it to every payday, then re-render.
+// Called whenever a bill is added/removed so the per-paycheck number updates immediately.
+function applyConstantRate() {
+  const rate = minFlatTransfer();
+  getThursdays().forEach(d => {
+    const k = fmtKey(d);
+    if (!SKIP_DATES.includes(k)) state.transfers[k] = rate;
+  });
+  saveState();
+  renderDashboard();
+  renderProjection();
+  renderWeeks();
+  renderSettings();
+}
+function updateBillAmount(input) {
+  const mk = input.dataset.month, bid = input.dataset.bill;
+  const val = parseFloat(input.value);
+  if (!state.amounts[mk]) state.amounts[mk] = {};
+  if (isNaN(val)) { delete state.amounts[mk][bid]; }
+  else { state.amounts[mk][bid] = val; }
+  openMonths.add(mk);
+  saveState();
+  renderDashboard();
+  renderProjection();
+  renderSettings();
+}
+function switchTab(id) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.querySelector(`[data-tab="${id}"]`).classList.add('active');
+  document.getElementById(id).classList.add('active');
+  if (id === 'savings') renderSavings();
+  if (id === 'weeks') renderWeeks();
+  if (id === 'projection') renderProjection();
+  if (id === 'prices') renderPrices();
+  if (id === 'settings') renderSettings();
+  if (id === 'dashboard') renderDashboard();
+}
+
+try {
+  renderDashboard();
+} catch (err) {
+  const el = document.getElementById('dashboard');
+  if (el) el.innerHTML = `<div class="alert-card danger" style="margin-top:16px"><div class="alert-title">Couldn't load your saved plan</div>${(err && err.message) || err}<br><br><button class="add-btn" onclick="localStorage.removeItem('budget_v3');location.reload()">Reset saved data & reload</button></div>`;
+  throw err;
+}
+</script>
+</body>
+</html>
